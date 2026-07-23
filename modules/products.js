@@ -1,314 +1,401 @@
+/**
+ * Just Jane Maker Lab - Product Catalog & BOM Module
+ * Path: modules/products.js
+ */
+
 (function(){
   var FILE='products.json';
-  var INV_FILE='inventory.json';
-  var frame=document.getElementById('module-frame');
-  var panel=document.createElement('div');
-  panel.id='panel-products';panel.className='module-panel';
+  var products=[];
+  var invList=[];
+  var editId=null;
+  var bomList=[]; // Temporary array of BOM items during product creation/edit
 
-  panel.innerHTML=
-    '<div class="page-header"><h2>Product Builder</h2><p>Build finished products from inventory + labour &mdash; auto COGS &amp; pricing</p></div>'+
-    '<div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border)">'+
-      '<button id="prod-tab-list" style="padding:10px 28px;background:none;border:none;border-bottom:3px solid var(--accent);color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;margin-bottom:-2px">Products</button>'+
-      '<button id="prod-tab-build" style="padding:10px 28px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text-muted);font-weight:600;font-size:14px;cursor:pointer;margin-bottom:-2px">Build / Edit</button>'+
-    '</div>'+
-    '<div id="prod-list-pane">'+
-      '<div class="stat-row">'+
-        '<div class="stat-box"><div class="sv" style="color:var(--accent)" id="prod-total">0</div><div class="sl">Products</div></div>'+
-        '<div class="stat-box"><div class="sv" style="color:var(--gold)" id="prod-avg-cogs">$0.00</div><div class="sl">Avg COGS</div></div>'+
-        '<div class="stat-box"><div class="sv" style="color:var(--green)" id="prod-avg-margin">0%</div><div class="sl">Avg Margin</div></div>'+
-        '<div class="stat-box"><div class="sv" style="color:var(--teal)" id="prod-cats">0</div><div class="sl">Categories</div></div>'+
-      '</div>'+
-      '<div class="toolbar">'+
-        '<div class="search-box"><input id="prod-search" placeholder="Search products..."></div>'+
-        '<select id="prod-cat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">'+
-          '<option value="">All Categories</option>'+
-          '<option>Charcuterie Board</option><option>Sublimation Mug</option><option>Custom Tumbler</option>'+
-          '<option>Laser Engraved</option><option>3D Print</option><option>Candle</option>'+
-          '<option>Resin</option><option>Gift Set</option><option>Other</option>'+
-        '</select>'+
-        '<button class="btn btn-primary" id="prod-new-btn">+ New Product</button>'+
-      '</div>'+
-      '<div id="prod-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:16px"></div>'+
-    '</div>'+
-    '<div id="prod-build-pane" style="display:none">'+
-      '<div class="card" style="margin-bottom:20px">'+
-        '<h3 style="font-size:14px;font-weight:700;margin-bottom:12px" id="prod-form-title">New Product</h3>'+
-        '<div class="input-row">'+
-          '<div class="field" style="flex:2"><label>Product Name</label><input id="prod-name" placeholder="e.g. Custom Charcuterie Board - Medium"></div>'+
-          '<div class="field"><label>Category</label><select id="prod-cat">'+
-            '<option>Charcuterie Board</option><option>Sublimation Mug</option><option>Custom Tumbler</option>'+
-            '<option>Laser Engraved</option><option>3D Print</option><option>Candle</option>'+
-            '<option>Resin</option><option>Gift Set</option><option>Other</option>'+
-          '</select></div>'+
-          '<div class="field"><label>SKU / Product Code</label><input id="prod-sku" placeholder="e.g. BLK-CHB-001" style="font-family:monospace;font-weight:700"></div>'+
-        '</div>'+
-        '<div class="input-row">'+
-          '<div class="field"><label>Status</label><select id="prod-status"><option>Active</option><option>Draft</option><option>Seasonal</option><option>Discontinued</option></select></div>'+
-          '<div class="field"><label>Sale Price (CAD $)</label><input id="prod-price" type="number" step="0.01" placeholder="0.00"></div>'+
-          '<div class="field"><label>Etsy Fee (CAD $)</label><input id="prod-etsy-fee" type="number" step="0.01" placeholder="0.00"></div>'+
-          '<div class="field"><label>Platforms</label><select id="prod-platform" multiple style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px;font-size:13px;height:68px">'+
-            '<option value="Etsy" selected>Etsy</option><option value="Facebook">Facebook</option>'+
-            '<option value="In Person">In Person</option><option value="Custom Order">Custom Order</option>'+
-          '</select></div>'+
-        '</div>'+
-        '<div class="input-row">'+
-          '<div class="field" style="flex:2"><label>Description</label><input id="prod-desc" placeholder="e.g. Handcrafted walnut charcuterie board, laser engraved with custom monogram"></div>'+
-          '<div class="field" style="flex:2"><label>Notes</label><input id="prod-notes" placeholder="e.g. 40 min labour, 15 min laser time, seal with food-safe oil"></div>'+
-        '</div>'+
-      '</div>'+
-      '<div class="card" style="margin-bottom:20px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-          '<h3 style="font-size:14px;font-weight:700;margin:0">Bill of Materials</h3>'+
-          '<span style="font-size:12px;color:var(--text-muted)">Items from inventory used to make this product</span>'+
-        '</div>'+
-        '<div style="display:flex;gap:8px;margin-bottom:12px">'+
-          '<select id="bom-inv-select" style="flex:2;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px"><option value="">-- Select inventory item --</option></select>'+
-          '<input id="bom-qty" type="number" step="0.01" min="0.01" value="1" style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px;font-size:13px">'+
-          '<button class="btn btn-primary" id="bom-add-btn">Add Item</button>'+
-        '</div>'+
-        '<div id="bom-list"><div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px" id="bom-empty">No materials added yet.</div></div>'+
-        '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:8px">'+
-          '<h4 style="font-size:13px;font-weight:700;margin-bottom:10px">Labour</h4>'+
-          '<div class="input-row">'+
-            '<div class="field"><label>Labour Hours</label><input id="prod-labour-hrs" type="number" step="0.25" value="0"></div>'+
-            '<div class="field"><label>Hourly Rate ($)</label><input id="prod-labour-rate" type="number" step="0.01" value="20"></div>'+
-            '<div class="field"><label>Labour Cost</label><div id="prod-labour-cost-display" style="padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-weight:700;color:var(--teal)">$0.00</div></div>'+
-          '</div>'+
-        '</div>'+
-        '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:8px">'+
-          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">'+
-            '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">MATERIALS</div><div style="font-size:18px;font-weight:800;color:var(--accent)" id="prod-mat-total">$0.00</div></div>'+
-            '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">LABOUR</div><div style="font-size:18px;font-weight:800;color:var(--teal)" id="prod-lab-total">$0.00</div></div>'+
-            '<div style="background:var(--bg);border:2px solid var(--accent);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">COGS</div><div style="font-size:18px;font-weight:800;color:var(--accent)" id="prod-cogs-display">$0.00</div></div>'+
-            '<div style="background:var(--bg);border:2px solid var(--green);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">MARGIN</div><div style="font-size:18px;font-weight:800;color:var(--green)" id="prod-margin-display">--%</div></div>'+
-          '</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:8px"><button class="btn btn-primary" id="prod-save-btn">Save Product</button><button class="btn btn-ghost" id="prod-cancel-btn">Cancel</button></div>'+
-    '</div>'+
-    '<div id="prod-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center">'+
-      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;width:min(680px,92vw);max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)">'+
-        '<button id="prod-modal-x" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer">x</button>'+
-        '<div id="prod-modal-body"></div>'+
-        '<div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">'+
-          '<button class="btn btn-primary" id="prod-modal-edit">Edit Product</button>'+
-          '<button class="btn btn-ghost" id="prod-modal-close">Close</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-
-  frame.appendChild(panel);
-
-  var products=[],invItems=[],bomItems=[],editId=null,modalId=null;
   function g(id){return document.getElementById(id);}
-  function esc(v){return String(v===undefined||v===null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-  function switchTab(tab){
-    if(tab==='list'){
-      g('prod-list-pane').style.display='';g('prod-build-pane').style.display='none';
-      g('prod-tab-list').style.cssText='padding:10px 28px;background:none;border:none;border-bottom:3px solid var(--accent);color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;margin-bottom:-2px';
-      g('prod-tab-build').style.cssText='padding:10px 28px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text-muted);font-weight:600;font-size:14px;cursor:pointer;margin-bottom:-2px';
+  window.__makerInit_products=function(){
+    var frame=g('module-frame');
+    var p=g('panel-products');
+    if(!p){
+      p=document.createElement('div');p.id='panel-products';p.className='module-panel';
+      p.innerHTML=`
+        <div class="page-header">
+          <h2>Product Catalog &amp; BOM Builder</h2>
+          <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <button class="btn btn-primary" id="prod-tab-list-btn">Product Directory</button>
+          <button class="btn btn-ghost" id="prod-tab-form-btn">Add New Product</button>
+        </div>
+
+        <!-- LIST TAB -->
+        <div id="prod-tab-list">
+          <div class="card">
+            <div class="toolbar">
+              <div class="search-box"><input type="text" id="prod-search" placeholder="Search products..."></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Product Details</th><th>SKU</th><th>Labor + Mat.</th><th>COGS</th><th>Price</th><th>Profit</th><th style="width:70px">Actions</th></tr>
+                </thead>
+                <tbody id="prod-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORM TAB -->
+        <div id="prod-tab-form" style="display:none">
+          <form id="prod-form" style="display:flex;gap:24px;flex-wrap:wrap">
+            <div class="card" style="flex:1;min-width:320px">
+              <h3 style="margin-bottom:14px">Product Specification</h3>
+              
+              <div class="field" style="margin-bottom:10px">
+                <label>Product Name</label><input type="text" id="p-name" required>
+              </div>
+              <div class="field" style="margin-bottom:10px">
+                <label>SKU</label><input type="text" id="p-sku" required placeholder="e.g. FIN-TUM-GLIT">
+              </div>
+              <div style="display:flex;gap:10px;margin-bottom:10px">
+                <div class="field" style="flex:1">
+                  <label>Category</label>
+                  <select id="p-cat">
+                    <option value="Sublimation Tumblers">Sublimation Tumblers</option>
+                    <option value="3D Prints">3D Prints</option>
+                    <option value="Laser Crafts">Laser Crafts</option>
+                    <option value="Other Finishings">Other Finishings</option>
+                  </select>
+                </div>
+                <div class="field" style="flex:1">
+                  <label>Status</label>
+                  <select id="p-status"><option value="Active">Active</option><option value="Discontinued">Discontinued</option></select>
+                </div>
+              </div>
+
+              <div class="field" style="margin-bottom:10px">
+                <label>Sales Platforms (JSON List)</label>
+                <input type="text" id="p-platforms" placeholder='e.g. ["Etsy", "Shopify", "In-Person"]' value='["Etsy"]'>
+              </div>
+
+              <div style="display:flex;gap:10px;margin-bottom:10px">
+                <div class="field" style="flex:1"><label>Sale Price ($)</label><input type="number" id="p-price" step="any" required></div>
+                <div class="field" style="flex:1"><label>Etsy Fee ($)</label><input type="number" id="p-fee" step="any" value="0"></div>
+              </div>
+
+              <div class="field" style="margin-bottom:10px">
+                <label>Description</label><textarea id="p-desc" style="min-height:50px"></textarea>
+              </div>
+              <div class="field" style="margin-bottom:14px">
+                <label>Manufacturing Notes</label><textarea id="p-notes" style="min-height:50px"></textarea>
+              </div>
+
+              <h3 style="margin-top:20px;margin-bottom:10px">Labor Calculation</h3>
+              <div style="display:flex;gap:10px">
+                <div class="field" style="flex:1"><label>Labor Hours</label><input type="number" id="p-lab-hrs" step="any" value="0.5"></div>
+                <div class="field" style="flex:1"><label>Hourly Rate ($/hr)</label><input type="number" id="p-lab-rate" step="any" value="20"></div>
+              </div>
+            </div>
+
+            <!-- Bill of Materials Card -->
+            <div class="card" style="width:400px;display:flex;flex-direction:column">
+              <h3 style="margin-bottom:14px">Bill of Materials (BOM)</h3>
+              
+              <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
+                <div class="field" style="flex:1">
+                  <label>Inventory Item</label>
+                  <select id="p-bom-item"><option value="">Select Raw Item...</option></select>
+                </div>
+                <div class="field" style="width:80px">
+                  <label>Qty Required</label><input type="number" id="p-bom-qty" step="any" value="1">
+                </div>
+                <button type="button" class="btn btn-secondary" id="p-bom-add-btn">Add</button>
+              </div>
+
+              <div class="table-wrap" style="flex:1;min-height:160px;margin-bottom:14px">
+                <table>
+                  <thead><tr><th>Item</th><th>Qty</th><th>Cost</th><th>Total</th><th style="width:40px"></th></tr></thead>
+                  <tbody id="p-bom-tbody"></tbody>
+                </table>
+              </div>
+
+              <div style="background:rgba(255,255,255,.02);padding:14px;border-radius:8px;border:1px solid var(--border);margin-bottom:18px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Material Cost:</span><span id="calc-mat-cost" style="font-weight:600">$0.00</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Labor Cost:</span><span id="calc-lab-cost" style="font-weight:600">$0.00</span></div>
+                <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:6px;font-weight:700"><span>Estimated COGS:</span><span id="calc-cogs">$0.00</span></div>
+              </div>
+
+              <div style="display:flex;gap:10px">
+                <button type="submit" class="btn btn-primary" style="flex:1">Save Product Spec</button>
+                <button type="button" class="btn btn-ghost" id="prod-cancel-btn">Cancel</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      `;
+      frame.appendChild(p);
+      setupEvents();
+    }
+    load();
+  };
+
+  function setupEvents(){
+    g('prod-tab-list-btn').addEventListener('click',function(){switchTab('list');});
+    g('prod-tab-form-btn').addEventListener('click',function(){switchTab('form');});
+
+    g('p-bom-add-btn').addEventListener('click',function(){
+      var id=g('p-bom-item').value;
+      var qty=parseFloat(g('p-bom-qty').value)||0;
+      if(!id||qty<=0)return;
+      var inv=invList.find(function(x){return x.id===id;});
+      if(inv){
+        var existing=bomList.find(function(x){return x.itemId===id;});
+        if(existing){
+          existing.qty+=qty;
+        }else{
+          bomList.push({itemId:id,name:inv.name,qty:qty,unitCost:inv.cost});
+        }
+        g('p-bom-qty').value='1';
+        renderBOM();
+      }
+    });
+
+    g('prod-form').addEventListener('submit',async function(e){
+      e.preventDefault();
+      var name=g('p-name').value;
+      var sku=g('p-sku').value;
+      var cat=g('p-cat').value;
+      var status=g('p-status').value;
+      var platforms=[];try{platforms=JSON.parse(g('p-platforms').value);}catch(err){platforms=["Etsy"];}
+      var salePrice=parseFloat(g('p-price').value)||0;
+      var etsyFee=parseFloat(g('p-fee').value)||0;
+      var desc=g('p-desc').value;
+      var notes=g('p-notes').value;
+      var labHrs=parseFloat(g('p-lab-hrs').value)||0;
+      var labRate=parseFloat(g('p-lab-rate').value)||0;
+
+      // Recalculate
+      var matCost=0;bomList.forEach(function(b){matCost+=b.qty*b.unitCost;});
+      var labCost=labHrs*labRate;
+      var cogs=matCost+labCost+etsyFee;
+      var margin=salePrice>0?((salePrice-cogs)/salePrice)*100:0;
+
+      var obj={
+        id:editId||'prod_'+Date.now(),
+        name:name,
+        category:cat,
+        sku:sku,
+        status:status,
+        platforms:platforms,
+        salePrice:salePrice,
+        etsyFee:etsyFee,
+        description:desc,
+        notes:notes,
+        labourHrs:labHrs,
+        labourRate:labRate,
+        labourCost:labCost,
+        materialCost:matCost,
+        cogs:cogs,
+        margin:margin,
+        bom:bomList.map(function(b){return {itemId:b.itemId,name:b.name,qty:b.qty,unitCost:b.unitCost};})
+      };
+      if(editId){var idx=products.findIndex(function(x){return x.id===editId;});if(idx>=0)products[idx]=obj;}
+      else products.unshift(obj);
+      await sv();
+      try {
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Products', [
+            obj.id, obj.name, obj.category, obj.sku, obj.status,
+            JSON.stringify(obj.platforms), obj.salePrice, obj.etsyFee,
+            obj.description, obj.notes, obj.labourHrs, obj.labourRate,
+            obj.labourCost, obj.materialCost, obj.cogs, obj.margin,
+            JSON.stringify(obj.bom)
+          ]);
+        }
+      } catch (err) {
+        console.error('[Products] Error syncing to remote sheet:', err);
+      }
+      clearBuildForm();switchTab('list');renderList();
+    });
+    g('prod-cancel-btn').addEventListener('click',function(){clearBuildForm();switchTab('list');});
+    g('prod-search').addEventListener('input',renderList);
+
+    // Watch labor changes to live-calc
+    ['p-lab-hrs','p-lab-rate','p-price','p-fee'].forEach(function(id){
+      g(id).addEventListener('input',recalcSummary);
+    });
+  }
+
+  function switchTab(t){
+    if(t==='list'){
+      g('prod-tab-list').style.display='block';g('prod-tab-form').style.display='none';
+      g('prod-tab-list-btn').className='btn btn-primary';g('prod-tab-form-btn').className='btn btn-ghost';
     }else{
-      g('prod-list-pane').style.display='none';g('prod-build-pane').style.display='';
-      g('prod-tab-build').style.cssText='padding:10px 28px;background:none;border:none;border-bottom:3px solid var(--accent);color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;margin-bottom:-2px';
-      g('prod-tab-list').style.cssText='padding:10px 28px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text-muted);font-weight:600;font-size:14px;cursor:pointer;margin-bottom:-2px';
+      g('prod-tab-list').style.display='none';g('prod-tab-form').style.display='block';
+      g('prod-tab-list-btn').className='btn btn-ghost';g('prod-tab-form-btn').className='btn btn-primary';
     }
   }
-  g('prod-tab-list').addEventListener('click',function(){switchTab('list');});
-  g('prod-tab-build').addEventListener('click',function(){switchTab('build');});
-  g('prod-new-btn').addEventListener('click',function(){clearBuildForm();switchTab('build');});
-
-  function recalcCosts(){
-    var matTotal=bomItems.reduce(function(s,b){return s+(b.unitCost||0)*(b.qty||1);},0);
-    var hrs=parseFloat(g('prod-labour-hrs').value)||0;
-    var rate=parseFloat(g('prod-labour-rate').value)||0;
-    var labTotal=hrs*rate;
-    var cogs=matTotal+labTotal;
-    var price=parseFloat(g('prod-price').value)||0;
-    var fee=parseFloat(g('prod-etsy-fee').value)||0;
-    var margin=price>0?((price-fee-cogs)/(price-fee)*100):0;
-    g('prod-labour-cost-display').textContent='$'+labTotal.toFixed(2);
-    g('prod-mat-total').textContent='$'+matTotal.toFixed(2);
-    g('prod-lab-total').textContent='$'+labTotal.toFixed(2);
-    g('prod-cogs-display').textContent='$'+cogs.toFixed(2);
-    g('prod-margin-display').textContent=margin.toFixed(1)+'%';
-    g('prod-margin-display').style.color=margin>=40?'var(--green)':margin>=20?'var(--gold)':'var(--red)';
-    return {matTotal:matTotal,labTotal:labTotal,cogs:cogs,margin:margin};
-  }
-  ['prod-labour-hrs','prod-labour-rate','prod-price','prod-etsy-fee'].forEach(function(id){g(id).addEventListener('input',recalcCosts);});
-
-  function renderBOM(){
-    var container=g('bom-list');
-    var empty=g('bom-empty');
-    if(bomItems.length===0){empty.style.display='';container.querySelectorAll('.bom-row').forEach(function(r){r.remove();});return;}
-    empty.style.display='none';
-    container.querySelectorAll('.bom-row').forEach(function(r){r.remove();});
-    bomItems.forEach(function(b,idx){
-      var row=document.createElement('div');
-      row.className='bom-row';
-      row.style.cssText='display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:6px';
-      row.innerHTML=
-        '<div style="flex:2;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(b.name)+'</div>'+
-        '<div style="font-size:11px;color:var(--text-muted)">'+esc(b.sku||'')+(b.unitCost?' &bull; $'+Number(b.unitCost).toFixed(2)+'/unit':'')+'</div></div>'+
-        '<input type="number" step="0.01" min="0.01" value="'+b.qty+'" style="width:70px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px" data-idx="'+idx+'">'+
-        '<div style="font-size:13px;font-weight:700;color:var(--accent);width:70px;text-align:right">$'+((b.unitCost||0)*(b.qty||1)).toFixed(2)+'</div>'+
-        '<button class="btn btn-danger btn-sm bom-del" data-idx="'+idx+'">x</button>';
-      container.appendChild(row);
-    });
-    container.querySelectorAll('input[data-idx]').forEach(function(inp){
-      inp.addEventListener('input',function(){bomItems[parseInt(inp.dataset.idx)].qty=parseFloat(inp.value)||1;renderBOM();recalcCosts();});
-    });
-    container.querySelectorAll('.bom-del').forEach(function(btn){
-      btn.addEventListener('click',function(){bomItems.splice(parseInt(btn.dataset.idx),1);renderBOM();recalcCosts();});
-    });
-  }
-
-  g('bom-add-btn').addEventListener('click',function(){
-    var invId=g('bom-inv-select').value;if(!invId)return;
-    var inv=invItems.find(function(i){return i.id===invId;});if(!inv)return;
-    var qty=parseFloat(g('bom-qty').value)||1;
-    var ex=bomItems.find(function(b){return b.invId===invId;});
-    if(ex){ex.qty+=qty;}else{bomItems.push({invId:invId,name:inv.name,sku:inv.sku,unitCost:Number(inv.cost)||0,qty:qty});}
-    g('bom-qty').value=1;renderBOM();recalcCosts();
-  });
 
   async function loadInventory(){
-    try{invItems=await window.makerAPI.readData(INV_FILE)||[];}catch(e){invItems=[];}
-    var sel=g('bom-inv-select');
-    sel.innerHTML='<option value="">-- Select inventory item --</option>';
-    invItems.forEach(function(i){sel.innerHTML+='<option value="'+i.id+'">['+esc(i.cat||'')+'] '+esc(i.name)+' - $'+Number(i.cost||0).toFixed(2)+'</option>';});
+    try{invList=await window.makerAPI.readData('inventory.json')||[];}catch(err){invList=[];}
+    var sel=g('p-bom-item');if(!sel)return;
+    sel.innerHTML='<option value="">Select Raw Item...</option>';
+    invList.forEach(function(i){
+      var o=document.createElement('option');o.value=i.id;o.textContent=i.name+' ('+i.sku+')';sel.appendChild(o);
+    });
   }
-
-  function clearBuildForm(){
-    editId=null;g('prod-form-title').textContent='New Product';
-    g('prod-name').value='';g('prod-cat').value='Charcuterie Board';g('prod-sku').value='';
-    g('prod-status').value='Active';g('prod-price').value='';g('prod-etsy-fee').value='';
-    g('prod-desc').value='';g('prod-notes').value='';g('prod-labour-hrs').value=0;g('prod-labour-rate').value=20;
-    var opts=g('prod-platform').options;for(var i=0;i<opts.length;i++){opts[i].selected=opts[i].value==='Etsy';}
-    bomItems=[];renderBOM();recalcCosts();
-  }
-
-  function showModal(id){
-    var p=products.find(function(x){return x.id===id;});if(!p)return;
-    modalId=id;
-    var sc={Active:'badge-green',Draft:'badge-muted',Seasonal:'badge-gold',Discontinued:'badge-red'};
-    g('prod-modal-body').innerHTML=
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-right:30px">'+
-        '<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:4px">'+esc(p.category)+'</div>'+
-        '<h3 style="font-size:20px;font-weight:800;margin:0 0 4px">'+esc(p.name)+'</h3>'+
-        (p.sku?'<code style="font-size:12px;color:var(--accent)">'+esc(p.sku)+'</code>':'')+
-        '</div><span class="badge '+(sc[p.status]||'')+'">'+esc(p.status)+'</span></div>'+
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'+
-        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">SALE PRICE</div><div style="font-size:18px;font-weight:800;color:var(--accent)">$'+Number(p.salePrice||0).toFixed(2)+'</div></div>'+
-        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">COGS</div><div style="font-size:18px;font-weight:800;color:var(--red)">$'+Number(p.cogs||0).toFixed(2)+'</div></div>'+
-        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">MARGIN</div><div style="font-size:18px;font-weight:800;color:var(--green)">'+Number(p.margin||0).toFixed(1)+'%</div></div>'+
-        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px">LABOUR</div><div style="font-size:18px;font-weight:800;color:var(--teal)">$'+Number(p.labourCost||0).toFixed(2)+'</div></div>'+
-      '</div>'+
-      (p.description?'<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;font-style:italic">'+esc(p.description)+'</div>':'')+
-      '<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Bill of Materials</div>'+
-      ((p.bom||[]).length?
-        '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="color:var(--text-muted);border-bottom:1px solid var(--border)"><th style="text-align:left;padding:4px 6px">Item</th><th style="text-align:right;padding:4px 6px">Qty</th><th style="text-align:right;padding:4px 6px">Unit Cost</th><th style="text-align:right;padding:4px 6px">Line Total</th></tr>'+
-        (p.bom||[]).map(function(b){return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 6px;font-weight:600">'+esc(b.name)+'</td><td style="padding:5px 6px;text-align:right">'+b.qty+'</td><td style="padding:5px 6px;text-align:right;color:var(--text-muted)">$'+Number(b.unitCost||0).toFixed(2)+'</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:var(--accent)">$'+(Number(b.unitCost||0)*Number(b.qty||1)).toFixed(2)+'</td></tr>';}).join('')+
-        '</table>':'<div style="color:var(--text-muted);font-size:13px">No materials recorded.</div>')+
-      '</div>'+
-      (p.platforms&&p.platforms.length?'<div style="font-size:12px;color:var(--text-muted)">Sold on: <strong>'+p.platforms.join(', ')+'</strong></div>':'')+
-      (p.notes?'<div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Notes: '+esc(p.notes)+'</div>':'');
-    g('prod-modal').style.display='flex';
-  }
-
-  g('prod-modal').addEventListener('click',function(e){if(e.target===g('prod-modal'))g('prod-modal').style.display='none';});
-  g('prod-modal-x').addEventListener('click',function(){g('prod-modal').style.display='none';});
-  g('prod-modal-close').addEventListener('click',function(){g('prod-modal').style.display='none';});
-  g('prod-modal-edit').addEventListener('click',function(){
-    g('prod-modal').style.display='none';
-    if(!modalId)return;
-    var p=products.find(function(x){return x.id===modalId;});if(!p)return;
-    editId=modalId;
-    g('prod-form-title').textContent='Edit Product';g('prod-name').value=p.name||'';g('prod-cat').value=p.category||'Other';
-    g('prod-sku').value=p.sku||'';g('prod-status').value=p.status||'Active';g('prod-price').value=p.salePrice||'';
-    g('prod-etsy-fee').value=p.etsyFee||'';g('prod-desc').value=p.description||'';g('prod-notes').value=p.notes||'';
-    g('prod-labour-hrs').value=p.labourHrs||0;g('prod-labour-rate').value=p.labourRate||20;
-    var opts=g('prod-platform').options;var plats=p.platforms||[];
-    for(var i=0;i<opts.length;i++){opts[i].selected=plats.indexOf(opts[i].value)>=0;}
-    bomItems=(p.bom||[]).map(function(b){return Object.assign({},b);});
-    renderBOM();recalcCosts();switchTab('build');
-  });
 
   async function load(){
     await loadInventory();
+    try {
+      let fetchFunc = null;
+      if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
+        fetchFunc = window.MAKER_CONFIG.fetchFromDatabase;
+      }
+      if (fetchFunc) {
+        const remoteData = await fetchFunc('Products');
+        if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
+          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
+          products = remoteData.slice(startIndex).map(row => {
+            let platforms = [];
+            try { platforms = JSON.parse(row[5] || '[]'); } catch(e) {
+              platforms = row[5] ? row[5].split(',') : [];
+            }
+            let bom = [];
+            try { bom = JSON.parse(row[16] || '[]'); } catch(e) {}
+
+            return {
+              id: row[0] || '',
+              name: row[1] || '',
+              category: row[2] || '',
+              sku: row[3] || '',
+              status: row[4] || 'Active',
+              platforms: platforms,
+              salePrice: parseFloat(row[6]) || 0,
+              etsyFee: parseFloat(row[7]) || 0,
+              description: row[8] || '',
+              notes: row[9] || '',
+              labourHrs: parseFloat(row[10]) || 0,
+              labourRate: parseFloat(row[11]) || 20,
+              labourCost: parseFloat(row[12]) || 0,
+              materialCost: parseFloat(row[13]) || 0,
+              cogs: parseFloat(row[14]) || 0,
+              margin: parseFloat(row[15]) || 0,
+              bom: bom
+            };
+          }).filter(x => x.id && x.status !== 'DELETED');
+          
+          await window.makerAPI.writeData(FILE, products);
+          renderList();
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('[Products] Failed loading remote products:', err);
+    }
+
     try{products=await window.makerAPI.readData(FILE)||[];}catch(e){products=[];}
     renderList();
   }
-  async function sv(){await window.makerAPI.writeData(FILE,products);}
+  async function sv(){
+    await window.makerAPI.writeData(FILE,products);
+  }
 
   function renderList(){
     var q=g('prod-search').value.toLowerCase();
-    var cf=g('prod-cat-filter').value;
-    var fi=products.filter(function(p){return(!cf||p.category===cf)&&(!q||JSON.stringify(p).toLowerCase().indexOf(q)>-1);});
-    g('prod-total').textContent=products.length;
-    g('prod-avg-cogs').textContent='$'+(products.length?products.reduce(function(s,p){return s+(p.cogs||0);},0)/products.length:0).toFixed(2);
-    var wm=products.filter(function(p){return p.margin!=null;});
-    g('prod-avg-margin').textContent=(wm.length?wm.reduce(function(s,p){return s+(p.margin||0);},0)/wm.length:0).toFixed(1)+'%';
-    g('prod-cats').textContent=new Set(products.map(function(p){return p.category;})).size;
-    if(!fi.length){g('prod-grid').innerHTML='<div style="color:var(--text-muted);font-size:14px;grid-column:1/-1;text-align:center;padding:40px">No products yet. Click "+ New Product" to build your first one.</div>';return;}
-    var sc={Active:'badge-green',Draft:'badge-muted',Seasonal:'badge-gold',Discontinued:'badge-red'};
-    g('prod-grid').innerHTML=fi.map(function(p){
-      var mc=Number(p.margin||0)>=40?'var(--green)':Number(p.margin||0)>=20?'var(--gold)':'var(--red)';
-      return '<div class="card" data-id="'+p.id+'" style="cursor:pointer;display:flex;flex-direction:column">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'+
-          '<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:2px">'+esc(p.category)+'</div>'+
-          '<div style="font-size:16px;font-weight:700">'+esc(p.name)+'</div>'+
-          (p.sku?'<code style="font-size:11px;color:var(--text-muted)">'+esc(p.sku)+'</code>':'')+'</div>'+
-          '<span class="badge '+(sc[p.status]||'')+'">'+esc(p.status)+'</span></div>'+
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'+
-          '<div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center"><div style="font-size:10px;color:var(--text-muted)">Price</div><div style="font-weight:800;color:var(--accent)">$'+Number(p.salePrice||0).toFixed(2)+'</div></div>'+
-          '<div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center"><div style="font-size:10px;color:var(--text-muted)">COGS</div><div style="font-weight:800;color:var(--red)">$'+Number(p.cogs||0).toFixed(2)+'</div></div>'+
-          '<div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center"><div style="font-size:10px;color:var(--text-muted)">Margin</div><div style="font-weight:800;color:'+mc+'">'+Number(p.margin||0).toFixed(1)+'%</div></div>'+
-        '</div>'+
-        (p.description?'<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-bottom:8px;flex:1">'+esc(p.description.substring(0,100))+'</div>':'<div style="flex:1"></div>')+
-        '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">'+((p.bom||[]).length)+' material'+(((p.bom||[]).length)===1?'':'s')+' &bull; '+(p.labourHrs||0)+'h labour &bull; '+(p.platforms||[]).join(', ')+'</div>'+
-        '<div style="display:flex;gap:8px;border-top:1px solid var(--border);padding-top:10px">'+
-          '<button class="btn btn-primary btn-sm prodv" data-id="'+p.id+'" style="flex:1">View Details</button>'+
-          '<button class="btn btn-ghost btn-sm prode" data-id="'+p.id+'">Edit</button>'+
-          '<button class="btn btn-danger btn-sm prodd" data-id="'+p.id+'">Del</button>'+
-        '</div></div>';
-    }).join('');
-    panel.querySelectorAll('#prod-grid .card').forEach(function(c){c.addEventListener('click',function(e){if(e.target.closest('button'))return;showModal(c.dataset.id);});});
-    panel.querySelectorAll('.prodv').forEach(function(b){b.addEventListener('click',function(){showModal(b.dataset.id);});});
+    var tbody=g('prod-tbody');if(!tbody)return;
+    tbody.innerHTML='';
+
+    products.forEach(function(p){
+      if(q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q))return;
+      var tr=document.createElement('tr');
+      var profit=p.salePrice-p.cogs;
+      tr.innerHTML=`
+        <td><div style="font-weight:700">${p.name}</div><div style="font-size:11px;color:var(--muted)">${p.category} • ${p.platforms.join(', ')}</div></td>
+        <td><span class="tag">${p.sku}</span></td>
+        <td><div>Lab: $${p.labourCost.toFixed(2)}</div><div style="font-size:11px;color:var(--muted)">Mat: $${p.materialCost.toFixed(2)}</div></td>
+        <td style="font-weight:600">$${p.cogs.toFixed(2)}</td>
+        <td style="font-weight:600">$${p.salePrice.toFixed(2)}</td>
+        <td><span class="badge ${profit>0?'badge-green':'badge-red'}">$${profit.toFixed(2)} (${p.margin.toFixed(0)}%)</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm prode" data-id="${p.id}">✎</button>
+          <button class="btn btn-danger btn-sm prodd" data-id="${p.id}">🗑</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
     panel.querySelectorAll('.prode').forEach(function(b){
       b.addEventListener('click',function(){
-        modalId=b.dataset.id;g('prod-modal-edit').click();
+        var p=products.find(function(x){return x.id===b.dataset.id;});
+        if(p){
+          editId=p.id;
+          g('p-name').value=p.name;g('p-sku').value=p.sku;g('p-cat').value=p.category;g('p-status').value=p.status;
+          g('p-platforms').value=JSON.stringify(p.platforms);g('p-price').value=p.salePrice;g('p-fee').value=p.etsyFee;
+          g('p-desc').value=p.description;g('p-notes').value=p.notes;
+          g('p-lab-hrs').value=p.labourHrs;g('p-lab-rate').value=p.labourRate;
+          bomList=p.bom.map(function(x){return {itemId:x.itemId,name:x.name,qty:x.qty,unitCost:x.unitCost};});
+          renderBOM();switchTab('form');
+        }
       });
     });
+
     panel.querySelectorAll('.prodd').forEach(function(b){
       b.addEventListener('click',async function(){
         if(!confirm('Delete this product?'))return;
-        products=products.filter(function(x){return x.id!==b.dataset.id;});await sv();renderList();
+        const idToDelete = b.dataset.id;
+        products=products.filter(function(x){return x.id!==idToDelete;});
+        await sv();
+        try {
+          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            await window.MAKER_CONFIG.saveToDatabase('Products', [idToDelete, '', '', '', 'DELETED']);
+          }
+        } catch (err) {
+          console.error('[Products] Error deleting from remote sheet:', err);
+        }
+        renderList();
       });
     });
   }
 
-  g('prod-save-btn').addEventListener('click',async function(){
-    var name=g('prod-name').value.trim();if(!name){alert('Product name is required.');return;}
-    var costs=recalcCosts();
-    var platforms=[];var opts=g('prod-platform').options;
-    for(var i=0;i<opts.length;i++){if(opts[i].selected)platforms.push(opts[i].value);}
-    var obj={
-      id:editId||Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-      name:name,category:g('prod-cat').value,sku:g('prod-sku').value.trim(),status:g('prod-status').value,
-      platforms:platforms,salePrice:parseFloat(g('prod-price').value)||0,etsyFee:parseFloat(g('prod-etsy-fee').value)||0,
-      description:g('prod-desc').value.trim(),notes:g('prod-notes').value.trim(),
-      labourHrs:parseFloat(g('prod-labour-hrs').value)||0,labourRate:parseFloat(g('prod-labour-rate').value)||20,
-      labourCost:costs.labTotal,materialCost:costs.matTotal,cogs:costs.cogs,margin:costs.margin,
-      bom:bomItems.map(function(b){return Object.assign({},b);})
-    };
-    if(editId){var idx=products.findIndex(function(x){return x.id===editId;});if(idx>=0)products[idx]=obj;}
-    else products.unshift(obj);
-    await sv();clearBuildForm();switchTab('list');renderList();
-  });
-  g('prod-cancel-btn').addEventListener('click',function(){clearBuildForm();switchTab('list');});
-  g('prod-search').addEventListener('input',renderList);
-  g('prod-cat-filter').addEventListener('change',renderList);
+  function renderBOM(){
+    var tbody=g('p-bom-tbody');if(!tbody)return;
+    tbody.innerHTML='';
+    bomList.forEach(function(b,idx){
+      var total=b.qty*b.unitCost;
+      var tr=document.createElement('tr');
+      tr.innerHTML=`
+        <td>${b.name}</td><td>${b.qty}</td><td>$${b.unitCost.toFixed(2)}</td><td>$${total.toFixed(2)}</td>
+        <td><button type="button" class="btn btn-danger btn-sm bomr" style="padding:2px 6px" data-idx="${idx}">×</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('.bomr').forEach(function(b){
+      b.addEventListener('click',function(){
+        bomList.splice(parseInt(b.dataset.idx),1);renderBOM();
+      });
+    });
+    recalcSummary();
+  }
 
-  window.__makerInit_products=load;
+  function recalcSummary(){
+    var matCost=0;bomList.forEach(function(b){matCost+=b.qty*b.unitCost;});
+    var hrs=parseFloat(g('p-lab-hrs').value)||0;
+    var rate=parseFloat(g('p-lab-rate').value)||0;
+    var fee=parseFloat(g('p-fee').value)||0;
+    var labCost=hrs*rate;
+    var cogs=matCost+labCost+fee;
+
+    g('calc-mat-cost').textContent='$'+matCost.toFixed(2);
+    g('calc-lab-cost').textContent='$'+labCost.toFixed(2);
+    g('calc-cogs').textContent='$'+cogs.toFixed(2);
+  }
+
+  function clearBuildForm(){
+    editId=null;bomList=[];
+    g('prod-form').reset();
+    g('p-platforms').value='["Etsy"]';g('p-lab-hrs').value='0.5';g('p-lab-rate').value='20';g('p-fee').value='0';
+    g('p-bom-qty').value='1';
+    renderBOM();
+  }
 })();
