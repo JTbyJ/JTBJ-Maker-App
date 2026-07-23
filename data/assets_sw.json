@@ -1,0 +1,15 @@
+[
+  {
+    "id": "sw001",
+    "name": "Google Workspace Business Starter",
+    "purpose": "Email, Drive, Docs, Meet",
+    "login": "",
+    "licenseType": "Subscription",
+    "cost": "110.40",
+    "billing": "Annual",
+    "renewal": "2027-02-24",
+    "key": "",
+    "status": "Active",
+    "notes": "Renews 24 Feb 2027."
+  }
+]

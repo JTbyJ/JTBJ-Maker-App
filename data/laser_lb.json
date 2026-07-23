@@ -1,0 +1,102 @@
+[
+  {
+    "id": "lb001",
+    "name": "Wood Engrave - Standard",
+    "category": "Engrave",
+    "speed": 300,
+    "power": 45,
+    "passes": 1,
+    "dpi": 254,
+    "notes": "Good all-round setting for plywood and basswood engraving."
+  },
+  {
+    "id": "lb002",
+    "name": "Wood Cut - 3mm",
+    "category": "Cut",
+    "speed": 15,
+    "power": 80,
+    "passes": 2,
+    "dpi": "",
+    "notes": "Reliable cut for 3mm birch. Use air assist."
+  },
+  {
+    "id": "lb003",
+    "name": "Acrylic Cut - 3mm",
+    "category": "Cut",
+    "speed": 8,
+    "power": 90,
+    "passes": 2,
+    "dpi": "",
+    "notes": "Slow and steady. Remove protective film after."
+  },
+  {
+    "id": "lb004",
+    "name": "Slate Photo Engrave",
+    "category": "Photo",
+    "speed": 200,
+    "power": 80,
+    "passes": 1,
+    "dpi": 254,
+    "notes": "Stucchi dithering, gamma 1.8. Excellent results on dark slate."
+  },
+  {
+    "id": "lb005",
+    "name": "Leather Mark",
+    "category": "Engrave",
+    "speed": 250,
+    "power": 50,
+    "passes": 1,
+    "dpi": 254,
+    "notes": "Test on scrap first. Genuine leather only."
+  },
+  {
+    "id": "lb006",
+    "name": "Cork Score & Snap",
+    "category": "Score",
+    "speed": 100,
+    "power": 40,
+    "passes": 1,
+    "dpi": "",
+    "notes": "Score line for clean snapping rather than cutting through."
+  },
+  {
+    "id": "lb007",
+    "name": "Cardstock Cut",
+    "category": "Cut",
+    "speed": 80,
+    "power": 25,
+    "passes": 1,
+    "dpi": "",
+    "notes": "Fast, clean. Never leave unattended."
+  },
+  {
+    "id": "lb008",
+    "name": "Ceramic Paint Engrave",
+    "category": "Engrave",
+    "speed": 200,
+    "power": 70,
+    "passes": 1,
+    "dpi": 254,
+    "notes": "Black spray coat first. Laser removes paint. Wipe clean after."
+  },
+  {
+    "id": "lb009",
+    "name": "Fill - Dark Wood",
+    "category": "Fill",
+    "speed": 300,
+    "power": 60,
+    "passes": 1,
+    "dpi": 254,
+    "notes": "Fill mode for solid dark areas. Good for logos."
+  },
+  {
+    "id": "lb010",
+    "name": "Photo - Jarvis Dither",
+    "category": "Photo",
+    "speed": 250,
+    "power": 55,
+    "passes": 1,
+    "dpi": 254,
+    "notes": "Jarvis dithering, gamma 2.0. Good for portraits on wood."
+  }
+]
