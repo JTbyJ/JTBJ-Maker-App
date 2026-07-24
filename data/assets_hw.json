@@ -106,14 +106,14 @@
   {
     "id": "hw008",
     "name": "HP OfficeJet Pro 8030",
-    "category": "Inkjet MFP",
+    "category": "Inkjet Printer",
+    "status": "Active",
     "brand": "HP",
     "model": "OfficeJet Pro 8030",
     "serial": "",
     "purchaseDate": "",
     "price": "",
-    "warrantyExpiry": "",
-    "status": "Offline",
+    "warranty": "",
     "notes": "Network: HP8DC08B.lan. Driver unavailable. Currently offline."
   }
 ]

@@ -4,6 +4,7 @@
     "name": "Filaments.ca",
     "category": "Filament",
     "status": "Active",
+    "rating": 5,
     "website": "filaments.ca",
     "contact": "",
     "email": "",
@@ -11,7 +12,6 @@
     "lead": "3-7 business days",
     "minOrder": "",
     "shipping": "Free shipping over $75 CAD",
-    "rating": 5,
     "notes": "Canadian-based filament supplier. Wide range of PLA, PETG, TPU. Fast domestic shipping. Loyalty points program."
   },
   {

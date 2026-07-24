@@ -230,6 +230,16 @@ window.__customerCache = null;
         </tr>`;
     }
 
+    let localData = [];
+    try {
+      if (window.makerAPI && window.makerAPI.readData) {
+        localData = await window.makerAPI.readData('customers.json') || [];
+        if (!Array.isArray(localData)) localData = [];
+      }
+    } catch (e) {
+      localData = [];
+    }
+
     try {
       // 2. Fetch from database
       let fetchFunc = null;
@@ -239,12 +249,13 @@ window.__customerCache = null;
         fetchFunc = window.makerAPI.fetchSheetData;
       }
 
+      let remoteDataParsed = null;
       if (fetchFunc) {
         const remoteData = await fetchFunc('Customers');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
           const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
           
-          window.__customerCache = remoteData.slice(startIndex).map(row => ({
+          remoteDataParsed = remoteData.slice(startIndex).map(row => ({
             id: row[0] || '',
             name: row[1] || '',
             email: row[2] || '',
@@ -256,26 +267,41 @@ window.__customerCache = null;
             notes: row[8] || '',
             createdAt: row[9] || ''
           })).filter(c => c.name || c.email);
-
-          if (window.makerAPI && window.makerAPI.writeData) {
-            await window.makerAPI.writeData('customers.json', window.__customerCache);
-          }
-
-          renderCustomerTable(window.__customerCache);
-          return;
         }
       }
 
-      // Fallback to local file if available
-      if (window.makerAPI && window.makerAPI.readData) {
-        const data = await window.makerAPI.readData('customers.json');
-        window.__customerCache = Array.isArray(data) ? data : [];
+      if (remoteDataParsed !== null) {
+        if (remoteDataParsed.length === 0 && localData.length > 0) {
+          // Seed the remote sheet
+          window.__customerCache = localData;
+          renderCustomerTable(window.__customerCache);
+
+          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            for (const cust of localData) {
+              await window.MAKER_CONFIG.saveToDatabase('Customers', [
+                cust.id, cust.name, cust.email, formatPhoneNumber(cust.phone),
+                cust.address, cust.finishPref, cust.igHandle, cust.type,
+                cust.notes, cust.createdAt
+              ]);
+            }
+          }
+        } else {
+          window.__customerCache = remoteDataParsed;
+          renderCustomerTable(window.__customerCache);
+
+          const localStr = JSON.stringify(localData);
+          const remoteStr = JSON.stringify(remoteDataParsed);
+          if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
+            await window.makerAPI.writeData('customers.json', remoteDataParsed);
+          }
+        }
+        return;
       }
     } catch (err) {
       console.error('Failed loading customers:', err);
     }
 
-    if (!window.__customerCache) window.__customerCache = [];
+    window.__customerCache = localData;
     renderCustomerTable(window.__customerCache);
   }
 
@@ -299,29 +325,30 @@ window.__customerCache = null;
       const formattedPhone = formatPhoneNumber(cust.phone);
 
       return `
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-          <td style="padding: 10px;">
-            <div style="font-weight: 700; color: #fff;">${escapeHtml(cust.name || 'Unnamed')}</div>
-            ${igDisplay ? `<div style="font-size: 11px; color: #3b82f6;">${escapeHtml(igDisplay)}</div>` : ''}
-            <div style="font-size: 10px; color: #64748b;">Joined: ${escapeHtml(cust.createdAt || 'N/A')}</div>
+        <tr style="border-bottom: 1px solid #2d3748;">
+          <td style="padding: 12px; vertical-align: top;">
+            <strong style="color: #fff; font-size: 14px;">${escapeHtml(cust.name)}</strong><br>
+            <span style="color: #cbd5e0; font-size: 12px;">${escapeHtml(igDisplay)}</span>
           </td>
-          <td style="font-size: 12px; color: #e2e8f0; padding: 10px;">
-            <div>${escapeHtml(cust.email || '-')}</div>
-            <div style="color: #38bdf8;">${escapeHtml(formattedPhone || '')}</div>
-            ${cust.address ? `<div style="font-size: 11px; color: #94a3b8; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📍 ${escapeHtml(cust.address)}</div>` : ''}
+          <td style="padding: 12px; vertical-align: top; font-size: 12px; color: #e2e8f0; line-height: 1.4;">
+            ${cust.email ? `✉️ ${escapeHtml(cust.email)}<br>` : ''}
+            ${formattedPhone ? `📞 ${escapeHtml(formattedPhone)}<br>` : ''}
+            ${cust.address ? `📍 ${escapeHtml(cust.address)}` : ''}
           </td>
-          <td style="padding: 10px;">
+          <td style="padding: 12px; vertical-align: top;">
             <span class="badge-type badge-${tagClass}">${escapeHtml(cust.type || 'Personal')}</span>
           </td>
-          <td style="font-size: 12px; color: #f472b6; padding: 10px;">
-            ${escapeHtml(cust.finishPref || '-')}
+          <td style="padding: 12px; vertical-align: top; color: #a0aec0; font-size: 12px;">
+            ${escapeHtml(cust.finishPref || '—')}
           </td>
-          <td style="color: var(--muted, #a0aec0); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 10px;">
-            ${escapeHtml(cust.notes || '-')}
+          <td style="padding: 12px; vertical-align: top; max-width: 200px; word-wrap: break-word; font-size: 12px; color: #a0aec0;">
+            ${escapeHtml(cust.notes || '—')}
           </td>
-          <td style="text-align: right; white-space: nowrap; padding: 10px;">
-            <button class="btn btn-secondary btn-sm" style="cursor:pointer; margin-right: 4px;" onclick="window.__editCustomer('${cust.id}')">Edit</button>
-            <button class="btn btn-danger btn-sm" style="cursor:pointer;" onclick="window.__deleteCustomer('${cust.id}')">Delete</button>
+          <td style="padding: 12px; vertical-align: top; text-align: right;">
+            <div style="display: flex; gap: 6px; justify-content: flex-end;">
+              <button class="btn btn-secondary btn-sm" onclick="__editCustomer('${cust.id}')" style="cursor: pointer; padding: 4px 8px; font-size: 11px;">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="__deleteCustomer('${cust.id}')" style="cursor: pointer; padding: 4px 8px; font-size: 11px;">Del</button>
+            </div>
           </td>
         </tr>
       `;
@@ -330,61 +357,64 @@ window.__customerCache = null;
 
   function attachCustomerEventListeners() {
     const form = document.getElementById('customer-form');
-    const formTitle = document.getElementById('form-title');
-    const submitBtn = document.getElementById('btn-submit-cust');
-    const cancelBtn = document.getElementById('btn-cancel-edit');
     const searchInput = document.getElementById('cust-search');
-    const statusEl = document.getElementById('customer-status');
     const importBtn = document.getElementById('btn-import-csv');
+    const fileInput = document.getElementById('cust-csv-input');
     const syncBtn = document.getElementById('btn-sync-cust');
-    const csvInput = document.getElementById('cust-csv-input');
-    const phoneInput = document.getElementById('cust-phone');
+    const cancelEditBtn = document.getElementById('btn-cancel-edit');
 
     if (syncBtn) {
-      syncBtn.addEventListener('click', () => loadCustomerData(true));
+      syncBtn.addEventListener('click', async () => {
+        await loadCustomerData(true);
+      });
     }
 
-    if (phoneInput) {
-      phoneInput.addEventListener('blur', (e) => {
-        e.target.value = formatPhoneNumber(e.target.value);
+    if (importBtn && fileInput) {
+      importBtn.addEventListener('click', () => {
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          handleCSVImport(evt.target.result);
+        };
+        reader.readAsText(file);
+        fileInput.value = ''; // Reset
       });
     }
 
     function resetFormState() {
       currentEditId = null;
-      if (form) form.reset();
+      form.reset();
+      
+      const formTitle = document.getElementById('form-title');
+      const submitBtn = document.getElementById('btn-submit-cust');
       if (formTitle) formTitle.textContent = 'Add New Customer';
       if (submitBtn) submitBtn.textContent = 'Save Customer';
-      if (cancelBtn) cancelBtn.style.display = 'none';
+      if (cancelEditBtn) cancelEditBtn.style.display = 'none';
     }
 
-    if (cancelBtn) cancelBtn.addEventListener('click', resetFormState);
-
-    if (importBtn && csvInput) {
-      importBtn.addEventListener('click', () => csvInput.click());
-      
-      csvInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-          const text = evt.target.result;
-          await handleCSVImport(text);
-          csvInput.value = '';
-        };
-        reader.readAsText(file);
-      });
+    if (cancelEditBtn) {
+      cancelEditBtn.addEventListener('click', resetFormState);
     }
 
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        const statusEl = document.getElementById('customer-status');
+        if (statusEl) {
+          statusEl.style.color = '#3182ce';
+          statusEl.textContent = 'Saving Customer...';
+        }
+
         const name = document.getElementById('cust-name').value.trim();
         const email = document.getElementById('cust-email').value.trim();
-        const rawPhone = document.getElementById('cust-phone').value.trim();
-        const phone = formatPhoneNumber(rawPhone);
+        const phone = document.getElementById('cust-phone').value.trim();
         const address = document.getElementById('cust-address').value.trim();
         const type = document.getElementById('cust-type').value;
         const igHandle = document.getElementById('cust-ig').value.trim();
