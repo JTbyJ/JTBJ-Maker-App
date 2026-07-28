@@ -48,8 +48,26 @@
     return html;
   }
 
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   /* ── PANEL HTML ── */
   panel.innerHTML=
+    '<style>' +
+    '  #panel-sku, #panel-sku * { -webkit-app-region: no-drag !important; }' +
+    '  #panel-sku input, #panel-sku textarea, #panel-sku button, #panel-sku select {' +
+    '    pointer-events: auto !important;' +
+    '    user-select: text !important;' +
+    '    -webkit-user-select: text !important;' +
+    '    position: relative !important;' +
+    '    z-index: 99999 !important;' +
+    '  }' +
+    '</style>' +
     '<div class="page-header"><h2>SKU Builder</h2><p>Generate and manage product SKUs &mdash; CATEGORY-SUBCATEGORY-SEQUENCE</p></div>'+
 
     '<div class="stat-row">'+
@@ -95,8 +113,9 @@
       /* PRODUCT DETAILS */
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
-        '<div class="field"><label>Brand</label><input id="sku-brand" placeholder="e.g. CREALITY"></div>'+
-        '<div class="field"><label>Status</label><select id="sku-status"><option>Active</option><option>Draft</option><option>Discontinued</option></select></div>'+
+        '<div class="field" style="flex:1"><label>Brand/Supplier</label><select id="sku-brand" style="font-weight:600;"><option value="">Select Supplier...</option></select></div>'+
+        '<div class="field" style="flex:1"><label>Classification</label><select id="sku-classification"><option>Raw Component / Material (BOM Input)</option><option>Finished Sellable Product (Etsy/Custom)</option></select></div>'+
+        '<div class="field" style="flex:1"><label>Status</label><select id="sku-status"><option>Active</option><option>Draft</option><option>Discontinued</option></select></div>'+
       '</div>'+
 
       /* PRICING */
@@ -132,13 +151,18 @@
         '<option value="PKG">PKG - Packaging</option>'+
         '<option value="SUB">SUB - Sublimation Supplies</option>'+
       '</select>'+
+      '<select id="sku-class-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">'+
+        '<option value="">All Classifications</option>'+
+        '<option>Raw Component / Material (BOM Input)</option>'+
+        '<option>Finished Sellable Product (Etsy/Custom)</option>'+
+      '</select>'+
       '<select id="sku-stat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">'+
         '<option value="">All Statuses</option>'+
         '<option>Active</option><option>Draft</option><option>Discontinued</option>'+
       '</select>'+
     '</div>'+
     '<div class="table-wrap"><table><thead><tr>'+
-      '<th>SKU</th><th>Product Name</th><th>CAT</th><th>Brand</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
+      '<th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand/Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
     '</tr></thead><tbody id="sku-tbody"></tbody></table></div>';
 
   frame.appendChild(panel);
@@ -184,24 +208,129 @@
   });
   ['sku-cost','sku-price'].forEach(function(id){$(id).addEventListener('input',calcMargin);});
 
+  /* ── LOAD SUPPLIERS ── */
+  async function loadSuppliers(){
+    var sups = [];
+    try { sups = await window.makerAPI.readData('suppliers.json') || []; } catch(e){}
+    var activeSups = sups.filter(s => s.status === 'Active');
+    var html = '<option value="">Select Supplier...</option>';
+    activeSups.forEach(s => {
+      html += '<option value="' + escapeHtml(s.name) + '">' + escapeHtml(s.name) + '</option>';
+    });
+    // Add defaults if empty
+    if(activeSups.length === 0){
+      ['CREALITY', 'Overture', 'GEEETECH', 'GIANTARM', 'Filaments.ca', 'Uline Canada', 'Michaels Canada', 'Home Depot / Rona'].forEach(name => {
+        html += '<option value="' + name + '">' + name + '</option>';
+      });
+    }
+    var brandSelect = $('sku-brand');
+    if (brandSelect) {
+      brandSelect.innerHTML = html;
+    }
+  }
+
+  /* ── RUN SKU MIGRATION FROM INVENTORY ── */
+  async function runSkuMigration() {
+    var inv = [];
+    try { inv = await window.makerAPI.readData('inventory.json') || []; } catch(e){}
+    var migratedCount = 0;
+    inv.forEach(function(item) {
+      if (item.sku && item.sku.trim() !== '') {
+        var existing = items.find(function(x) {
+          return x.sku && x.sku.toLowerCase() === item.sku.trim().toLowerCase();
+        });
+        if (!existing) {
+          // Migrate SKU
+          var newSku = {
+            id: item.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            sku: item.sku.trim(),
+            name: item.name || 'Unnamed Item',
+            cat: item.cat || 'FIL',
+            subcat: item.subcat || '',
+            brand: item.supplier || item.brand || '',
+            cost: Number(item.cost) || 0,
+            price: 0,
+            cogs: 0,
+            retail: 0,
+            status: 'Active',
+            notes: 'Migrated from Inventory',
+            classification: 'Raw Component / Material (BOM Input)'
+          };
+          items.push(newSku);
+          migratedCount++;
+
+          // Push row to dynamic database
+          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            var rowArray = [
+              newSku.id, newSku.sku, newSku.name, newSku.cat, newSku.subcat,
+              newSku.brand, newSku.cost, newSku.price, newSku.cogs, newSku.retail,
+              newSku.status, newSku.notes, newSku.classification
+            ];
+            window.MAKER_CONFIG.saveToDatabase('Sku', rowArray);
+          }
+        }
+      }
+    });
+    if (migratedCount > 0) {
+      await sv();
+    }
+  }
+
   /* ── LOAD ── */
   async function load(){
-    items=await window.makerAPI.readData(FILE)||[];
+    try {
+      let fetchFunc = (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase);
+      if (fetchFunc) {
+        const remoteData = await fetchFunc('Sku');
+        if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
+          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
+          items = remoteData.slice(startIndex).map(row => ({
+            id: row[0] || '',
+            sku: row[1] || '',
+            name: row[2] || '',
+            cat: row[3] || 'FIL',
+            subcat: row[4] || '',
+            brand: row[5] || '',
+            cost: Number(row[6]) || 0,
+            price: Number(row[7]) || 0,
+            cogs: Number(row[8]) || 0,
+            retail: Number(row[9]) || 0,
+            status: row[10] || 'Active',
+            notes: row[11] || '',
+            classification: row[12] || 'Raw Component / Material (BOM Input)'
+          })).filter(x => x.sku && x.status !== 'DELETED');
+
+          await sv();
+        } else {
+          items=await window.makerAPI.readData(FILE)||[];
+        }
+      } else {
+        items=await window.makerAPI.readData(FILE)||[];
+      }
+    } catch(err) {
+      items=await window.makerAPI.readData(FILE)||[];
+    }
+
+    await loadSuppliers();
+    await runSkuMigration();
     buildPreview();
     render();
   }
+
   async function sv(){await window.makerAPI.writeData(FILE,items);}
 
   /* ── RENDER TABLE ── */
   function render(){
     var q=$('sku-search').value.toLowerCase();
     var cf=$('sku-cat-filter').value;
+    var clf=$('sku-class-filter').value;
     var sf=$('sku-stat-filter').value;
     var fi=items.filter(function(i){
       var catOk=!cf||(i.cat||'')===cf;
+      var classOk=!clf||(i.classification||'Raw Component / Material (BOM Input)')===clf;
       var statOk=!sf||i.status===sf;
       var qOk=!q||JSON.stringify(i).toLowerCase().indexOf(q)!==-1;
-      return catOk&&statOk&&qOk;
+      return catOk&&classOk&&statOk&&qOk;
     });
 
     /* Stats */
@@ -219,11 +348,16 @@
       var catBadge='<span style="background:'+catInfo.color+';color:#fff;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:800;font-family:monospace">'+
         (i.cat||'?')+'</span>';
       var margin=(i.price&&i.cost)?((Number(i.price)-Number(i.cost))/Number(i.price)*100).toFixed(1)+'%':'--';
+
+      var isRaw = (i.classification || '').includes('Raw');
+      var classBadge = isRaw ? '<span class="badge badge-accent">🛠️ Raw</span>' : '<span class="badge badge-teal">🛍️ Etsy</span>';
+
       return '<tr>'+
         '<td style="font-family:monospace;font-weight:700;color:var(--accent)">'+i.sku+'</td>'+
-        '<td style="font-weight:600">'+i.name+'</td>'+
-        '<td>'+catBadge+'<br><span style="font-size:11px;color:var(--text-muted)">'+(i.subcat?i.subcat:'')+'</span></td>'+
-        '<td>'+(i.brand||'')+'</td>'+
+        '<td style="font-weight:600">'+escapeHtml(i.name)+'</td>'+
+        '<td>'+classBadge+'</td>'+
+        '<td>'+catBadge+'<br><span style="font-size:11px;color:var(--text-muted)">'+(i.subcat?escapeHtml(i.subcat):'')+'</span></td>'+
+        '<td>'+escapeHtml(i.brand||'—')+'</td>'+
         '<td>$'+Number(i.cost||0).toFixed(2)+'</td>'+
         '<td>$'+Number(i.price||0).toFixed(2)+'</td>'+
         '<td>$'+Number(i.cogs||0).toFixed(2)+'</td>'+
@@ -235,7 +369,7 @@
           '<button class="btn btn-danger btn-sm skud" data-id="'+i.id+'">Del</button>'+
         '</td>'+
       '</tr>';
-    }).join(''):'<tr><td colspan="11" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
+    }).join(''):'<tr><td colspan="12" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
 
     /* Edit buttons */
     panel.querySelectorAll('.skue').forEach(function(b){
@@ -248,6 +382,7 @@
         $('sku-seq').value='';
         $('sku-pname').value=i.name||'';
         $('sku-brand').value=i.brand||'';
+        $('sku-classification').value=i.classification || 'Raw Component / Material (BOM Input)';
         $('sku-cost').value=i.cost||'';
         $('sku-price').value=i.price||'';
         $('sku-cogs').value=i.cogs||'';
@@ -264,8 +399,13 @@
     panel.querySelectorAll('.skud').forEach(function(b){
       b.addEventListener('click',async function(){
         if(!confirm('Delete this SKU?'))return;
-        items=items.filter(function(x){return x.id!==b.dataset.id;});
-        await sv();render();
+        var idToDelete = b.dataset.id;
+        items=items.filter(function(x){return x.id!==idToDelete;});
+        await sv();
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Sku', [idToDelete, '', '', '', '', '', 0, 0, 0, 0, 'DELETED']);
+        }
+        render();
       });
     });
   }
@@ -283,7 +423,8 @@
       name:name,
       cat:catCode,
       subcat:subCode,
-      brand:$('sku-brand').value.trim(),
+      brand:$('sku-brand').value,
+      classification:$('sku-classification').value,
       cost:Number($('sku-cost').value)||0,
       price:Number($('sku-price').value)||0,
       cogs:Number($('sku-cogs').value)||0,
@@ -299,6 +440,13 @@
     }
     clearForm();
     await sv();render();
+    if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+      await window.MAKER_CONFIG.saveToDatabase('Sku', [
+        obj.id, obj.sku, obj.name, obj.cat, obj.subcat,
+        obj.brand, obj.cost, obj.price, obj.cogs, obj.retail,
+        obj.status, obj.notes, obj.classification
+      ]);
+    }
   });
 
   function clearForm(){
@@ -308,6 +456,7 @@
     $('sku-custom').value='';
     $('sku-pname').value='';
     $('sku-brand').value='';
+    $('sku-classification').value='Raw Component / Material (BOM Input)';
     $('sku-cost').value='';
     $('sku-price').value='';
     $('sku-cogs').value='';
@@ -326,6 +475,7 @@
   $('sku-cancel').addEventListener('click',clearForm);
   $('sku-search').addEventListener('input',render);
   $('sku-cat-filter').addEventListener('change',render);
+  $('sku-class-filter').addEventListener('change',render);
   $('sku-stat-filter').addEventListener('change',render);
 
   window.__makerInit_sku=load;
