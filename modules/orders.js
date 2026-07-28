@@ -18,6 +18,23 @@
     if(!p){
       p=document.createElement('div');p.id='panel-orders';p.className='module-panel';
       p.innerHTML=`
+        <style>
+          #panel-orders,
+          #panel-orders * {
+            -webkit-app-region: no-drag !important;
+          }
+
+          #panel-orders input,
+          #panel-orders textarea,
+          #panel-orders button,
+          #panel-orders select {
+            pointer-events: auto !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            position: relative !important;
+            z-index: 99999 !important;
+          }
+        </style>
         <div class="page-header">
           <h2>Sales Orders Directory</h2>
           <p>Record orders, build custom customer invoices, calculate exact margins, and sync transaction lines to your Google Database.</p>

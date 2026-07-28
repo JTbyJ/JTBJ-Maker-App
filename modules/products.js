@@ -18,6 +18,25 @@
     if(!p){
       p=document.createElement('div');p.id='panel-products';p.className='module-panel';
       p.innerHTML=`
+        <style>
+          #panel-products,
+          #panel-products * {
+            -webkit-app-region: no-drag !important;
+          }
+
+          #panel-products input,
+          #panel-products textarea,
+          #panel-products button,
+          #panel-products select,
+          #ai-seo-modal,
+          #ai-seo-modal * {
+            pointer-events: auto !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            position: relative !important;
+            z-index: 99999 !important;
+          }
+        </style>
         <div class="page-header">
           <h2>Product Catalog &amp; BOM Builder</h2>
           <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>

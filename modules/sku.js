@@ -58,6 +58,16 @@
 
   /* ── PANEL HTML ── */
   panel.innerHTML=
+    '<style>' +
+    '  #panel-sku, #panel-sku * { -webkit-app-region: no-drag !important; }' +
+    '  #panel-sku input, #panel-sku textarea, #panel-sku button, #panel-sku select {' +
+    '    pointer-events: auto !important;' +
+    '    user-select: text !important;' +
+    '    -webkit-user-select: text !important;' +
+    '    position: relative !important;' +
+    '    z-index: 99999 !important;' +
+    '  }' +
+    '</style>' +
     '<div class="page-header"><h2>SKU Builder</h2><p>Generate and manage product SKUs &mdash; CATEGORY-SUBCATEGORY-SEQUENCE</p></div>'+
 
     '<div class="stat-row">'+

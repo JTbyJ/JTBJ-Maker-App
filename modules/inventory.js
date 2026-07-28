@@ -13,6 +13,25 @@ window.__makerInit_inventory = function () {
   // Render the initial HTML layout if it hasn't been built yet
   if (!document.getElementById('inventory-app-container')) {
     container.innerHTML = `
+      <style>
+        #panel-inventory,
+        #panel-inventory * {
+          -webkit-app-region: no-drag !important;
+        }
+
+        #panel-inventory input,
+        #panel-inventory textarea,
+        #panel-inventory button,
+        #panel-inventory select,
+        #inventory-modal,
+        #inventory-modal * {
+          pointer-events: auto !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          position: relative !important;
+          z-index: 99999 !important;
+        }
+      </style>
       <div id="inventory-app-container">
         <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
           <div>
