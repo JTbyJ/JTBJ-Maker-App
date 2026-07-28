@@ -18,7 +18,6 @@
     return qty <= threshold;
   }
 
-  // 1. Updated buildHTML with multi-stat row
   function buildHTML() {
     var frame = document.getElementById('module-frame');
     if (document.getElementById('panel-home')) return;
@@ -29,19 +28,19 @@
         <!-- Expanded Stats Row (Low Stock, Products, Orders, etc.) -->
         <div class="stat-row">
           <div class="stat-box">
-            <div class="sv" id="hm-stat-low-stock">0</div>
+            <div class="sv" id="hm-stat-low-stock" style="color: var(--red);">0</div>
             <div class="sl">Low Stock Items</div>
           </div>
           <div class="stat-box">
-            <div class="sv" id="hm-stat-products">0</div>
+            <div class="sv" id="hm-stat-products" style="color: var(--teal);">0</div>
             <div class="sl">Total Products</div>
           </div>
           <div class="stat-box">
-            <div class="sv" id="hm-stat-orders">0</div>
+            <div class="sv" id="hm-stat-orders" style="color: var(--green);">0</div>
             <div class="sl">Active Orders</div>
           </div>
           <div class="stat-box">
-            <div class="sv" id="hm-stat-cogs">$0.00</div>
+            <div class="sv" id="hm-stat-cogs" style="color: var(--gold); font-family: monospace;">$0.00</div>
             <div class="sl">Est. Inventory Value</div>
           </div>
         </div>
@@ -55,16 +54,24 @@
         </div>
         <div id="hm-search-results" style="display:none; padding: 16px; margin-bottom: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);"></div>
 
-        <!-- Alerts -->
+        <!-- Alerts & Analytics Grouped Card -->
         <div class="card" style="margin-bottom: 24px;">
-          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text);">Inventory Alerts</h3>
+          <h3 style="font-size: 15px; margin-bottom: 12px; color: var(--text); display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span> Inventory Alerts &amp; Reorder Planner
+          </h3>
           <div id="hm-alerts-list">
             <p style="color: var(--muted); font-size: 13px;">Loading alerts...</p>
           </div>
+
+          <!-- Category Breakdown Placeholder -->
+          <div id="hm-category-breakdown"></div>
+
+          <!-- Grouped Supplier Reorder list -->
+          <div id="hm-supplier-reorder-list"></div>
         </div>
 
         <!-- Quick Access Grid -->
-        <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Quick Access</h2>
+        <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">Quick Access</h2>
         <div id="home-grid">
           <div class="home-card" data-goto="sublimation">
             <div class="hc-icon" style="color: var(--accent);">◈</div>
@@ -98,7 +105,7 @@
 
     var sources = [
       ['invData', 'inventory.json'],
-      ['skuData', 'skus.json'],
+      ['skuData', 'sku.json'],
       ['prodData', 'products.json'],
       ['ordData', 'orders.json'],
       ['custData', 'customers.json'],
@@ -175,7 +182,6 @@
     renderAlerts();
   }
 
-  // 2. Updated renderStatCards to calculate all top metrics including valuation/COGS
   function renderStatCards() {
     var lowStockItems = store.invData.filter(isLowStock);
     var lowEl = document.getElementById('hm-stat-low-stock');
@@ -187,10 +193,10 @@
     var ordEl = document.getElementById('hm-stat-orders');
     if (ordEl) ordEl.textContent = store.ordData.length;
 
-    // Calculate total inventory value / cost approximation
+    // Calculate total inventory value
     var totalVal = store.invData.reduce(function(acc, item) {
       var qty = typeof item.qty === 'number' ? item.qty : 0;
-      var cost = typeof item.cost === 'number' ? item.cost : (typeof item.price === 'number' ? item.price : 0);
+      var cost = typeof item.cost === 'number' ? item.cost : 0;
       return acc + (qty * cost);
     }, 0);
 
@@ -205,6 +211,8 @@
     var lowStockItems = store.invData.filter(isLowStock);
     if (lowStockItems.length === 0) {
       alertContainer.innerHTML = '<p style="color: var(--muted); font-size: 13px;">No alerts at this time.</p>';
+      document.getElementById('hm-category-breakdown').innerHTML = '';
+      document.getElementById('hm-supplier-reorder-list').innerHTML = '';
       return;
     }
 
@@ -215,7 +223,7 @@
     var html = displayedItems.map(function (item) {
       var name = item.name || 'Unnamed Item';
       var qty = typeof item.qty === 'number' ? item.qty : 0;
-      return '<div style="background: rgba(255,82,82,0.1); border-left: 3px solid var(--red); padding: 8px 12px; margin-bottom: 8px; font-size: 13px; border-radius: 4px;">⚠️ Low Stock: <strong>' + name + '</strong> (' + qty + ' remaining)</div>';
+      return '<div style="background: rgba(255,82,82,0.06); border-left: 3px solid var(--red); padding: 8px 12px; margin-bottom: 8px; font-size: 13px; border-radius: 4px; display:flex; justify-content:space-between; align-items:center;"><span>⚠️ Low Stock: <strong>' + name + '</strong> (' + qty + ' remaining)</span><span class="tag" style="background:#000;">' + (item.location || 'No Location') + '</span></div>';
     }).join('');
 
     if (hiddenCount > 0) {
@@ -223,6 +231,60 @@
     }
 
     alertContainer.innerHTML = html;
+
+    // Category Breakdown Chart
+    var valByCat = {};
+    store.invData.forEach(function(item) {
+      var cat = item.cat || 'OTHER';
+      var qty = typeof item.qty === 'number' ? item.qty : 0;
+      var cost = typeof item.cost === 'number' ? item.cost : 0;
+      valByCat[cat] = (valByCat[cat] || 0) + (qty * cost);
+    });
+
+    var totalVal = Object.values(valByCat).reduce((a, b) => a + b, 0);
+    var colors = { FIL: 'var(--accent)', MAT: 'var(--gold)', BLK: 'var(--teal)', SUB: 'var(--red)', PKG: 'var(--green)', OTHER: 'var(--muted)' };
+
+    var barHtml = '<div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px;"><h4 style="font-size: 13px; font-weight:700; color:var(--teal); margin-bottom: 12px;">📊 Valuation by Category Breakdown</h4><div style="display:flex; height: 16px; border-radius: 6px; overflow:hidden; background: var(--bg); margin-bottom: 8px;">';
+
+    if (totalVal > 0) {
+      Object.keys(valByCat).forEach(function(cat) {
+        var pct = (valByCat[cat] / totalVal * 100);
+        if (pct > 0) {
+          barHtml += '<div style="width: ' + pct + '%; background: ' + (colors[cat] || 'var(--muted)') + ';" title="' + cat + ': ' + pct.toFixed(1) + '%"></div>';
+        }
+      });
+      barHtml += '</div><div style="display:flex; flex-wrap:wrap; gap:12px; font-size:11px;">';
+      Object.keys(colors).forEach(function(cat) {
+        var val = valByCat[cat] || 0;
+        if (val > 0) {
+          barHtml += '<span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:' + colors[cat] + ';"></span> ' + cat + ': $' + val.toFixed(2) + '</span>';
+        }
+      });
+      barHtml += '</div>';
+    } else {
+      barHtml += '<div style="font-size: 11px; color: var(--muted); text-align: center; width: 100%; padding: 4px;">No valuation data available.</div></div>';
+    }
+    barHtml += '</div>';
+    document.getElementById('hm-category-breakdown').innerHTML = barHtml;
+
+    // Group low-stock items by Supplier
+    var groupedBySupplier = {};
+    lowStockItems.forEach(function(item) {
+      var supplier = item.supplier || 'Unspecified Supplier';
+      if (!groupedBySupplier[supplier]) groupedBySupplier[supplier] = [];
+      groupedBySupplier[supplier].push(item);
+    });
+
+    var reorderHtml = '<div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px;"><h4 style="font-size: 13px; font-weight:700; color:var(--gold); margin-bottom: 10px;">📋 Dynamic Shopping List (Grouped by Supplier)</h4>';
+    Object.keys(groupedBySupplier).forEach(function(supplier) {
+      reorderHtml += '<div style="margin-bottom: 12px; background: rgba(255,255,255,0.01); border: 1px solid var(--border); border-radius: 6px; padding: 10px;"><strong style="color: var(--accent); font-size: 12px;">🏢 ' + supplier + ' (' + groupedBySupplier[supplier].length + ' items to order)</strong>';
+      groupedBySupplier[supplier].forEach(function(item) {
+        reorderHtml += '<div style="font-size: 12px; margin-left: 10px; color: var(--text); margin-top: 5px;">• ' + item.name + ' <span class="tag" style="padding: 1px 4px; font-size: 10px; font-family: monospace;">SKU: ' + (item.sku || 'N/A') + '</span> (Current: ' + item.qty + ')</div>';
+      });
+      reorderHtml += '</div>';
+    });
+    reorderHtml += '</div>';
+    document.getElementById('hm-supplier-reorder-list').innerHTML = reorderHtml;
   }
 
   buildHTML();
