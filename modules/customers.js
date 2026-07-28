@@ -1,674 +1,54 @@
-/**
- * Just Jane Maker Lab - Customers Module (With In-Memory Caching)
- * Path: modules/customers.js
- */
-
-// Global cache to persist customer data across tab navigation
-window.__customerCache = null;
-
-(function() {
-  let currentEditId = null;
-
-  /**
-   * Phone Number Formatter
-   * Normalizes raw input/digits into +1 (XXX) XXX-XXXX format
-   */
-  function formatPhoneNumber(phone) {
-    if (!phone) return '';
-    const digits = String(phone).replace(/\D/g, '');
-    
-    if (digits.length === 10) {
-      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-    } else if (digits.length === 11 && digits.startsWith('1')) {
-      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-    } else if (digits.length > 0) {
-      return `+${digits}`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   
+   :root{
+      --bg:#0f0f1a;--surface:#1a1a2e;--panel:#16213e;--card:#1f2b47;
+      --accent:#e040fb;--accent2:#7c4dff;--teal:#00e5ff;--gold:#ffd600;
+      --green:#69f0ae;--red:#ff5252;--text:#e8eaf6;--muted:#90aaae;
+      --border:rgba(255,255,255,0.07);--radius:12px;--nav-w:220px;--trans:0.2s ease;
     }
-    return phone;
-  }
-
-  /**
-   * Syncs customer record directly to Google Sheets via MAKER_CONFIG / makerAPI
-   * Schema: [ID(A), Name(B), Email(C), Phone(D), Address(E), FinishPref(F), IGHandle(G), CustomerType(H), Notes(I), CreatedAt(J)]
-   */
-  async function persistSingleCustomer(customerObj) {
-    try {
-      const rowArray = [
-        customerObj.id || '',
-        customerObj.name || '',
-        customerObj.email || '',
-        formatPhoneNumber(customerObj.phone || ''),
-        customerObj.address || '',
-        customerObj.finishPref || '',
-        customerObj.igHandle || '',
-        customerObj.type || 'Personal',
-        customerObj.notes || '',
-        customerObj.createdAt || new Date().toISOString().slice(0, 10)
-      ];
-
-      if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-        await window.MAKER_CONFIG.saveToDatabase('Customers', rowArray);
-      } else if (window.makerAPI && window.makerAPI.saveRowData) {
-        await window.makerAPI.saveRowData('Customers', rowArray);
-      }
-
-      if (window.makerAPI && window.makerAPI.writeData) {
-        await window.makerAPI.writeData('customers.json', window.__customerCache || []);
-      }
-    } catch (err) {
-      console.error('Failed syncing customer to Google Sheets:', err);
-    }
-  }
-
-  window.__makerInit_customers = async function() {
-    buildCustomerPageLayout();
-    await loadCustomerData(false);
-    attachCustomerEventListeners();
-  };
-
-  function buildCustomerPageLayout() {
-    const panel = document.getElementById('panel-customers');
-    if (!panel) return;
-
-    panel.innerHTML = `
-      <style>
-        #panel-customers, 
-        #panel-customers * {
-          -webkit-app-region: no-drag !important;
-        }
-
-        #panel-customers input, 
-        #panel-customers textarea, 
-        #panel-customers button,
-        #panel-customers select {
-          pointer-events: auto !important;
-          user-select: text !important;
-          -webkit-user-select: text !important;
-          position: relative !important;
-          z-index: 99999 !important;
-        }
-
-        .badge-type {
-          display: inline-block;
-          padding: 2px 8px;
-          border-radius: 12px;
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-        .badge-vip { background: #f59e0b; color: #000; }
-        .badge-wholesale { background: #8b5cf6; color: #fff; }
-        .badge-repeat { background: #10b981; color: #fff; }
-        .badge-personal { background: #4b5563; color: #fff; }
-      </style>
-
-      <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-        <div>
-          <h2 style="font-size: 22px; font-weight: 700; color: #fff;">Customer Directory</h2>
-          <p style="color: var(--muted, #a0aec0); font-size: 13px;">Manage customer profiles, finish preferences, shipping addresses, and social handles.</p>
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn btn-ghost" id="btn-sync-cust" type="button" style="cursor: pointer;">
-            ğŸ”„ Sync
-          </button>
-          <input type="file" id="cust-csv-input" accept=".csv" style="display: none !important;">
-          <button class="btn btn-secondary" id="btn-import-csv" type="button" style="cursor: pointer;">
-            ğŸ“ Import CSV
-          </button>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
-        <!-- LEFT: Form -->
-        <div class="card" style="flex: 1; min-width: 320px; max-width: 420px; position: relative; z-index: 9999;">
-          <form id="customer-form">
-            <h3 id="form-title" style="font-size: 15px; font-weight: 700; margin-bottom: 14px; color: #fff;">Add New Customer</h3>
-            
-            <div class="field" style="margin-bottom: 10px;">
-              <label for="cust-name">CUSTOMER NAME *</label>
-              <input type="text" id="cust-name" required placeholder="e.g. Jane Doe">
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-              <div class="field" style="flex: 1;">
-                <label for="cust-email">EMAIL ADDRESS</label>
-                <input type="email" id="cust-email" placeholder="jane@example.com">
-              </div>
-              <div class="field" style="flex: 1;">
-                <label for="cust-phone">PHONE NUMBER</label>
-                <input type="tel" id="cust-phone" placeholder="+1 (514) 000-0000">
-              </div>
-            </div>
-
-            <div class="field" style="margin-bottom: 10px;">
-              <label for="cust-address">SHIPPING / MAILING ADDRESS</label>
-              <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-              <div class="field" style="flex: 1;">
-                <label for="cust-type">CUSTOMER TYPE / TAG</label>
-                <select id="cust-type" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a202c; color: #fff; border: 1px solid #4a5568;">
-                  <option value="Personal">Personal</option>
-                  <option value="Repeat">Repeat Buyer</option>
-                  <option value="VIP">VIP</option>
-                  <option value="Wholesale">Wholesale</option>
-                </select>
-              </div>
-              <div class="field" style="flex: 1;">
-                <label for="cust-ig">INSTAGRAM / SOCIAL</label>
-                <input type="text" id="cust-ig" placeholder="@janecrafts">
-              </div>
-            </div>
-
-            <div class="field" style="margin-bottom: 10px;">
-              <label for="cust-finish">DEFAULT FINISH PREFERENCE</label>
-              <input type="text" id="cust-finish" placeholder="e.g. Pink Glitter, Matte Black, Natural Wood">
-            </div>
-
-            <div class="field" style="margin-bottom: 16px;">
-              <label for="cust-notes">NOTES / PREFERENCES</label>
-              <textarea id="cust-notes" placeholder="e.g. Prefers expedited shipping, allergic to nickel" rows="2"></textarea>
-            </div>
-
-            <div style="display: flex; gap: 10px;">
-              <button type="submit" id="btn-submit-cust" class="btn btn-primary" style="flex: 1; cursor: pointer; background: #c026d3; color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: 600;">Save Customer</button>
-              <button type="button" id="btn-cancel-edit" class="btn btn-ghost" style="display: none; cursor: pointer;">Cancel</button>
-            </div>
-          </form>
-          <p id="customer-status" style="margin-top: 12px; font-weight: 600; font-size: 13px;"></p>
-        </div>
-
-        <!-- RIGHT: Table -->
-        <div class="card" style="flex: 2; min-width: 580px; position: relative; z-index: 9999;">
-          <div class="toolbar" style="margin-bottom: 16px;">
-            <div class="search-box" style="width: 100%;">
-              <input type="text" id="cust-search" placeholder="Search by name, email, phone, IG, finish, tag, or notes..." style="width: 100%;">
-            </div>
-          </div>
-
-          <div class="table-wrap" style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr>
-                  <th>CUSTOMER</th>
-                  <th>CONTACT & ADDRESS</th>
-                  <th>TAG</th>
-                  <th>FINISH PREF</th>
-                  <th>NOTES</th>
-                  <th style="text-align: right;">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody id="customer-table-body">
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Loads customer data from memory or fetches from Google Sheets.
-   * @param {boolean} forceRefresh - If true, bypasses memory cache.
-   */
-  async function loadCustomerData(forceRefresh = false) {
-    const tbody = document.getElementById('customer-table-body');
-
-    // 1. Return from memory cache if available
-    if (!forceRefresh && window.__customerCache && Array.isArray(window.__customerCache)) {
-      renderCustomerTable(window.__customerCache);
-      return;
-    }
-
-    if (tbody) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="6" style="text-align: center; color: var(--muted, #a0aec0); padding: 30px;">
-            Syncing customers with Google Sheets...
-          </td>
-        </tr>`;
-    }
-
-    let localData = [];
-    try {
-      if (window.makerAPI && window.makerAPI.readData) {
-        localData = await window.makerAPI.readData('customers.json') || [];
-        if (!Array.isArray(localData)) localData = [];
-      }
-    } catch (e) {
-      localData = [];
-    }
-
-    try {
-      // 2. Fetch from database
-      let fetchFunc = null;
-      if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
-        fetchFunc = window.MAKER_CONFIG.fetchFromDatabase;
-      } else if (window.makerAPI && window.makerAPI.fetchSheetData) {
-        fetchFunc = window.makerAPI.fetchSheetData;
-      }
-
-      let remoteDataParsed = null;
-      if (fetchFunc) {
-        const remoteData = await fetchFunc('Customers');
-        if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
-          
-          remoteDataParsed = remoteData.slice(startIndex).map(row => ({
-            id: row[0] || '',
-            name: row[1] || '',
-            email: row[2] || '',
-            phone: formatPhoneNumber(row[3] || ''),
-            address: row[4] || '',
-            finishPref: row[5] || '',
-            igHandle: row[6] || '',
-            type: row[7] || 'Personal',
-            notes: row[8] || '',
-            createdAt: row[9] || ''
-          })).filter(c => c.name || c.email);
-        }
-      }
-
-      if (remoteDataParsed !== null) {
-        if (remoteDataParsed.length === 0 && localData.length > 0) {
-          // Seed the remote sheet
-          window.__customerCache = localData;
-          renderCustomerTable(window.__customerCache);
-
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-            for (const cust of localData) {
-              await window.MAKER_CONFIG.saveToDatabase('Customers', [
-                cust.id, cust.name, cust.email, formatPhoneNumber(cust.phone),
-                cust.address, cust.finishPref, cust.igHandle, cust.type,
-                cust.notes, cust.createdAt
-              ]);
-            }
-          }
-        } else {
-          window.__customerCache = remoteDataParsed;
-          renderCustomerTable(window.__customerCache);
-
-          const localStr = JSON.stringify(localData);
-          const remoteStr = JSON.stringify(remoteDataParsed);
-          if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
-            await window.makerAPI.writeData('customers.json', remoteDataParsed);
-          }
-        }
-        return;
-      }
-    } catch (err) {
-      console.error('Failed loading customers:', err);
-    }
-
-    window.__customerCache = localData;
-    renderCustomerTable(window.__customerCache);
-  }
-
-  function renderCustomerTable(data) {
-    const tbody = document.getElementById('customer-table-body');
-    if (!tbody) return;
-
-    if (!data || data.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="6" style="text-align: center; color: var(--muted, #a0aec0); padding: 30px;">
-            No customers found. Add one or import a CSV!
-          </td>
-        </tr>`;
-      return;
-    }
-
-    tbody.innerHTML = data.map(cust => {
-      const tagClass = (cust.type || 'Personal').toLowerCase();
-      const igDisplay = cust.igHandle ? (cust.igHandle.startsWith('@') ? cust.igHandle : '@' + cust.igHandle) : '';
-      const formattedPhone = formatPhoneNumber(cust.phone);
-
-      return `
-        <tr style="border-bottom: 1px solid #2d3748;">
-          <td style="padding: 12px; vertical-align: top;">
-            <strong style="color: #fff; font-size: 14px;">${escapeHtml(cust.name)}</strong><br>
-            <span style="color: #cbd5e0; font-size: 12px;">${escapeHtml(igDisplay)}</span>
-          </td>
-          <td style="padding: 12px; vertical-align: top; font-size: 12px; color: #e2e8f0; line-height: 1.4;">
-            ${cust.email ? `âœ‰ï¸ ${escapeHtml(cust.email)}<br>` : ''}
-            ${formattedPhone ? `ğŸ“ ${escapeHtml(formattedPhone)}<br>` : ''}
-            ${cust.address ? `ğŸ“ ${escapeHtml(cust.address)}` : ''}
-          </td>
-          <td style="padding: 12px; vertical-align: top;">
-            <span class="badge-type badge-${tagClass}">${escapeHtml(cust.type || 'Personal')}</span>
-          </td>
-          <td style="padding: 12px; vertical-align: top; color: #a0aec0; font-size: 12px;">
-            ${escapeHtml(cust.finishPref || 'â€”')}
-          </td>
-          <td style="padding: 12px; vertical-align: top; max-width: 200px; word-wrap: break-word; font-size: 12px; color: #a0aec0;">
-            ${escapeHtml(cust.notes || 'â€”')}
-          </td>
-          <td style="padding: 12px; vertical-align: top; text-align: right;">
-            <div style="display: flex; gap: 6px; justify-content: flex-end;">
-              <button class="btn btn-secondary btn-sm" onclick="__editCustomer('${cust.id}')" style="cursor: pointer; padding: 4px 8px; font-size: 11px;">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="__deleteCustomer('${cust.id}')" style="cursor: pointer; padding: 4px 8px; font-size: 11px;">Del</button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  function attachCustomerEventListeners() {
-    const form = document.getElementById('customer-form');
-    const searchInput = document.getElementById('cust-search');
-    const importBtn = document.getElementById('btn-import-csv');
-    const fileInput = document.getElementById('cust-csv-input');
-    const syncBtn = document.getElementById('btn-sync-cust');
-    const cancelEditBtn = document.getElementById('btn-cancel-edit');
-
-    if (syncBtn) {
-      syncBtn.addEventListener('click', async () => {
-        await loadCustomerData(true);
-      });
-    }
-
-    if (importBtn && fileInput) {
-      importBtn.addEventListener('click', () => {
-        fileInput.click();
-      });
-
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-          handleCSVImport(evt.target.result);
-        };
-        reader.readAsText(file);
-        fileInput.value = ''; // Reset
-      });
-    }
-
-    function resetFormState() {
-      currentEditId = null;
-      form.reset();
-      
-      const formTitle = document.getElementById('form-title');
-      const submitBtn = document.getElementById('btn-submit-cust');
-      if (formTitle) formTitle.textContent = 'Add New Customer';
-      if (submitBtn) submitBtn.textContent = 'Save Customer';
-      if (cancelEditBtn) cancelEditBtn.style.display = 'none';
-    }
-
-    if (cancelEditBtn) {
-      cancelEditBtn.addEventListener('click', resetFormState);
-    }
-
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const statusEl = document.getElementById('customer-status');
-        if (statusEl) {
-          statusEl.style.color = '#3182ce';
-          statusEl.textContent = 'Saving Customer...';
-        }
-
-        const name = document.getElementById('cust-name').value.trim();
-        const email = document.getElementById('cust-email').value.trim();
-        const phone = document.getElementById('cust-phone').value.trim();
-        const address = document.getElementById('cust-address').value.trim();
-        const type = document.getElementById('cust-type').value;
-        const igHandle = document.getElementById('cust-ig').value.trim();
-        const finishPref = document.getElementById('cust-finish').value.trim();
-        const notes = document.getElementById('cust-notes').value.trim();
-
-        if (!window.__customerCache) window.__customerCache = [];
-        let targetCustomer = null;
-
-        if (currentEditId) {
-          const idx = window.__customerCache.findIndex(c => c.id === currentEditId);
-          if (idx !== -1) {
-            window.__customerCache[idx] = { 
-              ...window.__customerCache[idx], 
-              name, email, phone, address, type, igHandle, finishPref, notes 
-            };
-            targetCustomer = window.__customerCache[idx];
-          }
-        } else {
-          targetCustomer = {
-            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-            name,
-            email,
-            phone,
-            address,
-            type,
-            igHandle,
-            finishPref,
-            notes,
-            createdAt: new Date().toISOString().slice(0, 10)
-          };
-          window.__customerCache.unshift(targetCustomer);
-        }
-
-        if (targetCustomer) {
-          await persistSingleCustomer(targetCustomer);
-        }
-
-        if (statusEl) {
-          statusEl.style.color = '#48bb78';
-          statusEl.textContent = currentEditId ? 'Customer updated!' : 'Customer saved to Google Sheet!';
-          setTimeout(() => { statusEl.textContent = ''; }, 3000);
-        }
-
-        resetFormState();
-        renderCustomerTable(window.__customerCache);
-      });
-    }
-
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase();
-        if (!window.__customerCache) return;
-
-        const filtered = window.__customerCache.filter(c =>
-          (c.name && c.name.toLowerCase().includes(query)) ||
-          (c.email && c.email.toLowerCase().includes(query)) ||
-          (c.phone && c.phone.toLowerCase().includes(query)) ||
-          (c.address && c.address.toLowerCase().includes(query)) ||
-          (c.igHandle && c.igHandle.toLowerCase().includes(query)) ||
-          (c.finishPref && c.finishPref.toLowerCase().includes(query)) ||
-          (c.type && c.type.toLowerCase().includes(query)) ||
-          (c.notes && c.notes.toLowerCase().includes(query))
-        );
-        renderCustomerTable(filtered);
-      });
-    }
-  }
-
-  /**
-   * Multiline-safe CSV Parser for Google/Apple/Outlook contacts exports
-   */
-  async function handleCSVImport(csvText) {
-    const statusEl = document.getElementById('customer-status');
-    if (statusEl) {
-      statusEl.style.color = '#3b82f6';
-      statusEl.textContent = 'Importing CSV and syncing with Google Sheets...';
-    }
-
-    function parseCSVRows(text) {
-      const rows = [];
-      let currentRow = [];
-      let currentVal = '';
-      let inQuotes = false;
-
-      for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        const nextChar = text[i + 1];
-
-        if (char === '"') {
-          if (inQuotes && nextChar === '"') {
-            currentVal += '"';
-            i++;
-          } else {
-            inQuotes = !inQuotes;
-          }
-        } else if (char === ',' && !inQuotes) {
-          currentRow.push(currentVal.trim());
-          currentVal = '';
-        } else if ((char === '\r' || char === '\n') && !inQuotes) {
-          if (char === '\r' && nextChar === '\n') i++;
-          currentRow.push(currentVal.trim());
-          if (currentRow.some(cell => cell.length > 0)) {
-            rows.push(currentRow);
-          }
-          currentRow = [];
-          currentVal = '';
-        } else {
-          currentVal += char;
-        }
-      }
-      if (currentVal || currentRow.length > 0) {
-        currentRow.push(currentVal.trim());
-        if (currentRow.some(cell => cell.length > 0)) {
-          rows.push(currentRow);
-        }
-      }
-      return rows;
-    }
-
-    const allRows = parseCSVRows(csvText);
-    if (allRows.length === 0) return;
-
-    const headers = allRows[0].map(h => h.toLowerCase().trim());
-
-    const fnIdx = headers.findIndex(h => h === 'first name' || h === 'given name' || h.includes('first'));
-    const lnIdx = headers.findIndex(h => h === 'last name' || h === 'family name' || h.includes('last'));
-    const nameIdx = headers.findIndex(h => h === 'name' || h === 'display name' || h === 'full name');
-    
-    const emailIdx = headers.findIndex(h => h === 'e-mail 1 - value' || h === 'email 1 - value' || h === 'email' || h === 'email address');
-    const fallbackEmailIdx = headers.findIndex(h => h.includes('e-mail') && h.includes('value'));
-    const finalEmailIdx = emailIdx !== -1 ? emailIdx : fallbackEmailIdx;
-
-    const phoneIdx = headers.findIndex(h => h === 'phone 1 - value' || h === 'mobile' || h === 'phone number' || h === 'phone');
-    const fallbackPhoneIdx = headers.findIndex(h => h.includes('phone') && h.includes('value') && !h.includes('phonetic'));
-    const finalPhoneIdx = phoneIdx !== -1 ? phoneIdx : fallbackPhoneIdx;
-
-    const addrIdx = headers.findIndex(h => h.includes('address 1 - value') || h.includes('formatted address') || h.includes('street') || h.includes('address'));
-    const notesIdx = headers.findIndex(h => h === 'notes' || h.includes('note') || h.includes('memo'));
-    const finishIdx = headers.findIndex(h => h.includes('finish') || h.includes('preference'));
-    const igIdx = headers.findIndex(h => h.includes('instagram') || h.includes('handle') || h.includes('social'));
-    const typeIdx = headers.findIndex(h => h.includes('type') || h.includes('tag') || h.includes('label'));
-
-    let importedCount = 0;
-    if (!window.__customerCache) window.__customerCache = [];
-
-    for (let i = 1; i < allRows.length; i++) {
-      const cols = allRows[i];
-
-      let firstName = fnIdx !== -1 ? cols[fnIdx] : '';
-      let lastName = lnIdx !== -1 ? cols[lnIdx] : '';
-      let fullName = '';
-
-      if (firstName || lastName) {
-        fullName = `${firstName} ${lastName}`.trim();
-      } else if (nameIdx !== -1 && cols[nameIdx]) {
-        fullName = cols[nameIdx];
-      }
-
-      const email = finalEmailIdx !== -1 ? cols[finalEmailIdx] : '';
-      const rawPhone = finalPhoneIdx !== -1 ? cols[finalPhoneIdx] : '';
-      const phone = formatPhoneNumber(rawPhone);
-      const address = addrIdx !== -1 ? cols[addrIdx] : '';
-      const notes = notesIdx !== -1 ? cols[notesIdx] : '';
-      const finishPref = finishIdx !== -1 ? cols[finishIdx] : '';
-      const igHandle = igIdx !== -1 ? cols[igIdx] : '';
-      const rawType = typeIdx !== -1 ? cols[typeIdx] : 'Personal';
-
-      let type = 'Personal';
-      if (rawType.toLowerCase().includes('vip')) type = 'VIP';
-      else if (rawType.toLowerCase().includes('wholesale')) type = 'Wholesale';
-      else if (rawType.toLowerCase().includes('repeat')) type = 'Repeat';
-
-      if (!fullName && !email) continue;
-
-      const newCust = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        name: fullName || 'Unknown Contact',
-        email: email,
-        phone: phone,
-        address: address,
-        finishPref: finishPref,
-        igHandle: igHandle,
-        type: type,
-        notes: notes,
-        createdAt: new Date().toISOString().slice(0, 10)
-      };
-
-      window.__customerCache.unshift(newCust);
-      await persistSingleCustomer(newCust);
-      importedCount++;
-    }
-
-    renderCustomerTable(window.__customerCache);
-
-    if (statusEl) {
-      statusEl.style.color = '#48bb78';
-      statusEl.textContent = `Successfully imported ${importedCount} contacts!`;
-      setTimeout(() => { statusEl.textContent = ''; }, 4000);
-    }
-  }
-
-  window.__editCustomer = function(id) {
-    if (!window.__customerCache) return;
-    const cust = window.__customerCache.find(c => c.id === id);
-    if (!cust) return;
-
-    currentEditId = id;
-    document.getElementById('cust-name').value = cust.name || '';
-    document.getElementById('cust-email').value = cust.email || '';
-    document.getElementById('cust-phone').value = formatPhoneNumber(cust.phone || '');
-    document.getElementById('cust-address').value = cust.address || '';
-    document.getElementById('cust-type').value = cust.type || 'Personal';
-    document.getElementById('cust-ig').value = cust.igHandle || '';
-    document.getElementById('cust-finish').value = cust.finishPref || '';
-    document.getElementById('cust-notes').value = cust.notes || '';
-
-    const formTitle = document.getElementById('form-title');
-    const submitBtn = document.getElementById('btn-submit-cust');
-    const cancelBtn = document.getElementById('btn-cancel-edit');
-
-    if (formTitle) formTitle.textContent = 'Edit Customer';
-    if (submitBtn) submitBtn.textContent = 'Update Customer';
-    if (cancelBtn) cancelBtn.style.display = 'inline-block';
-  };
-
-  window.__deleteCustomer = async function(id) {
-    if (!confirm('Are you sure you want to delete this customer?')) return;
-
-    if (window.__customerCache) {
-      window.__customerCache = window.__customerCache.filter(c => c.id !== id);
-      renderCustomerTable(window.__customerCache);
-    }
-
-    try {
-      if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-        await window.MAKER_CONFIG.saveToDatabase('Customers', [id, '', 'DELETED']);
-      } else if (window.makerAPI && window.makerAPI.saveRowData) {
-        await window.makerAPI.saveRowData('Customers', [id, '', 'DELETED']);
-      }
-
-      if (window.makerAPI && window.makerAPI.writeData) {
-        await window.makerAPI.writeData('customers.json', window.__customerCache || []);
-      }
-    } catch (err) {
-      console.error('Failed to delete customer from Google Sheet:', err);
-    }
-  };
-
-  function escapeHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-})();
+    html,body{height:100vf;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif}
+    #app{display:flex;height:100vh}
+    #sidebar{width:var(--nav-w);min-width:var(--nav-w);background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;z-index:10}
+    #sidebar-logo{padding:20px 16px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,var(--accent2),var(--accent))}
+    #sidebar-logo h1{font-size:14px;font-weight:800;letter-spacing:.5px;color:#fff;line-height:1.2}
+    #sidebar-logo span{font-size:11px;color:rgba(255,255,255,.75);font-weight:400}
+    #nav-list{flex:1;overflow-y:auto;padding:10px 0}
+    #nav-list::-webkit-scrollbar{width:4px}
+    #nav-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+    .nav-section-label{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--muted);text-transform:uppercase;padding:16px 16px 8px}
+    .nav-item{display:flex;alj/z¹æz{KZ][\Î˜Ù[\ÙØ\ŒLœÜY[™ÎŒLMœØİ\œÛÜœÚ[\İ˜[œÚ][Û˜˜XÚÙÜ›İ[™˜\ŠK]˜[œÊKÛÛÜˆ˜\ŠK]˜[œÊNØÛÛÜ˜\ŠK[]]Y
+_Bˆ›˜]‹Z][Nšİ™\Ø˜XÚÙÜ›İ[™œ™Ø˜JMKMKMKŒÊNØÛÛÜ˜\ŠK]^
+_Bˆ›˜]‹Z][K˜Xİ]™^Ø˜XÚÙÜ›İ[™›[™X\‹YÜ˜YY[
+LYË˜\ŠKXXØÙ[
+K˜\ŠKXXØÙ[ŠJNØÛÛÜˆÙ™™Ù›Û]ÙZYÚŒBˆ›˜]‹ZXÛÛÙ›Û\Ú^™NŒMœÙ\Ü^Nš[›[™KX›ØÚÎİÚYŒŒİ^X[YÛ˜Ù[\ŸBˆ›˜]‹[X™[Ù›Û\Ú^™NŒLÜBˆÜÚYX˜\‹Y›Ûİ\ÜY[™ÎŒMMœØ›Ü™\‹]ÜŒ\ÛÛY˜\ŠKX›Ü™\ŠNÙ›Û\Ú^™NŒLœØÛÛÜ˜\ŠK[]]Y
+NÙ\Ü^N™›^Ø[YÛ‹Z][\Î˜Ù[\ÙØ\BˆÛXZ[Ù›^ŒNÙ\Ü^N™›^Ù›^Y\™Xİ[Û˜ÛÛ[[Ûİ™\™›İÎšY[Ø˜XÚÙÜ›İ[™˜\ŠKX™ÊNÜÜÚ][Ûœ™[]]™_BˆİÜ˜\Ù\Ü^N™›^Ú\İYKXÛÛ[œÜXÙKX™]ÙY[Ø[YÛ‹Z][\Î˜Ù[\ÜY[™ÎŒMœØ˜XÚÙÜ›İ[™˜\ŠK\[™[
+NØ›Ü™\‹X›İÛNŒ\ÛÛY˜\ŠKX›Ü™\ŠNŞ‹Z[™^_BˆİÜ˜\‹]]^Ù›Û\Ú^™NŒNÙ›Û]ÙZYÚØÛÛÜ˜\ŠK]^
+_BˆİÜ˜\‹Y]^Ù›Û\Ú^™NŒLœØÛÛÜ˜\ŠK[]]Y
+_BˆÛ[Ù[KYœ˜[Y^Ù›^ŒNÛİ™\™›İË^šY[Ûİ™\™›İË^N˜]]ÎÜÜÚ][Ûœ™[]]™_Bˆ›[Ù[K\[™[Ù\Ü^N››Û™NÚZYÚŒL	NÜY[™ÎŒBˆ›[Ù[K\[™[˜Xİ]™^Ù\Ü^N˜›ØÚßBˆ˜Ø\™Ø˜XÚÙÜ›İ[™˜\ŠKXØ\™
+NØ›Ü™\Œ\ÛÛY˜\ŠKX›Ü™\ŠNØ›Ü™\‹\˜Y]\Î˜\ŠK\˜Y]\ÊNÜY[™ÎŒŒØ›Ş\ÚYİÎŒŒ™Ø˜JŒŠ_BˆÙ›Û\Ú^™NŒŒÙ›Û]ÙZYÚÛX\™Ú[‹X›İÛNœØÛÛÜ˜\ŠK]^
+_BˆœYÙKZXY\ˆÙ›Û\Ú^™NŒLÜØÛÛÜ˜\ŠK[]]Y
+_Bˆ™šY[Ù\Ü^N™›^Ù›^Y\™Xİ[Û˜ÛÛ[[ÙØ\œBˆX™[Ù›Û\Ú^™NŒLœÙ›Û]ÙZYÚÌØÛÛÜ˜\ŠK[]]Y
+Nİ^]˜[œÙ›Ü›N\\˜Ø\ÙNÛ]\‹\ÜXÚ[™Î‹\Bˆ[œ]İ^K[œ]İ[K[\Ù[XZ[K[œ]Û[X™\—KÙ[Xİ^\™XØ˜XÚÙÜ›İ[™˜\ŠK\İ\™˜XÙJNØ›Ü™\Œ\ÛÛY˜\ŠKX›Ü™\ŠNØÛÛÜ˜\ŠK]^
+NØ›Ü™\‹\˜Y]\ÎœÜY[™ÎŒLLœÙ›Û\Ú^™NŒLÜÛİ][™N››Û™Nİ˜[œÚ][Û˜›Ü™\‹XÛÛÜˆ˜\ŠK]˜[œÊK›Ş\ÚYİÈ˜\ŠK]˜[œÊ_Bˆ[œ]™›Øİ\ËÙ[Xİ™›Øİ\Ë^\™XN™›Øİ\ŞØ›Ü™\‹XÛÛÜ˜\ŠKXXØÙ[
+NØ›Ş\ÚYİÎŒœ™Ø˜JŒLKŒMJ_Bˆ^\™X^Ü™\Ú^™N™\XØ[ÛZ[‹ZZYÚBˆ˜Ù\Ü^Nš[›[™KY›^Ø[YÛ‹Z][\Î˜Ù[\Ú\İYKXÛÛ[˜Ù[\ÙØ\Ø›Ü™\‹\˜Y]\ÎœÜY[™ÎŒLNÙ›Û\Ú^™NŒLÜÙ›Û]ÙZYÚŒØİ\œÛÜœÚ[\İ˜[œÚ][Û˜[œÙ›Ü›H˜\ŠK]˜[œÊK˜XÚÙÜ›İ[™˜\ŠK]˜[œÊK›Ş\ÚYİÈ˜\ŠK]˜[œÊNØ›Ü™\››Û™NÛ[™KZZYÚŒ_Bˆ˜˜Xİ]™^İ˜[œÙ›Ü›NœØØ[JMÊ_Bˆ˜‹\š[X\^Ø˜XÚÙÜ›İ[™›[™X\‹YÜ˜YY[
+LÍYYË˜ŠKXXØÙ[
+K˜\ŠKXXØÙ[ŠJNØÛÛÜˆÙ™™Ø›Ş\ÚYİÎŒM™Ø˜JŒLKŒÊ_Bˆ˜‹\š[X\Nšİ™\Ø^K\ÚYİÎŒœN™Ø˜JŒLK
+_Bˆ˜‹\ÙXÛÛ™\^Ø˜XÚÙÜ›İ[™˜\ŠK\İ\™˜XÙJNØ›Ü™\Œ\ÛÛY˜\ŠKX›Ü™\ŠNØÛÛÜ˜\ŠK]^
+_Bˆ˜‹\ÙXÛÛ™\Nšİ™\Ø˜XÚÙÜ›İ[™œ™Ø˜JMKMKMKŒJ_Bˆ˜‹Y[™Ù\Ø˜XÚÙÜ›İ[™˜\ŠK\™Y
+NØÛÛÜˆÙ™™ŸBˆ˜‹Y[™Ù\šİ™\Ø˜XÚÙÜ›İ[™ˆÙ™ŒÌÌÌßBˆ˜‹YÚÜİØ˜XÚÙÜ›İ[™˜[œÜ\™[ØÛÛÜ˜\ŠK]^
+_Bˆ˜‹YÚÜİšİ™\Ø]Ûœ™Ø˜JMKMKMKŒJ_Bˆ˜‹\Û^ÜY[™ÎœLœÙ›Û\Ú^™NŒL\Bˆ™œ˜[YKXÛÛ[ÛX^]ÚYŒLŒÛX\™Ú[Œ]]ßBˆ™Ü™Y[ØÛÛÜ˜\ŠKYÜ™Y[ŠGÂˆœ™YØÛÛÜ˜\ŠK\™Y
+_Bˆ™ÛÛØÛÛÜ˜\ŠKYÛÛ
+_BˆX[ØÛÛÜ˜\ŠK]X[
+_Bˆ˜˜YÙ^Ù\Ü^Nš[›[™KY›^Ø[YÛ‹Z][\Î˜Ù[\Ø›Ü™\‹\˜Y]\ÎM\ÜY[™ÎŒœÙ›Û\Ú^™NŒLÙ›Û]ÙZYÚÌİ^]˜[œÙ›Ü›N\XØ\Ù_Bˆ˜˜YÙKYÜ™Y[Ø˜XÚÙÜ›İ[™œ™Ø˜JLKMÍŒMJNØÛÛÜ˜\ŠKYÜ™Y[Š_Bˆ˜˜YÙK\™YØ˜XÚÙÜ›İ[™œ™Ø˜JMK‹‹ŒMJNØÛÛÜ˜\ŠK\™Y
+_Bˆ
+æ&FvRÖvöÆG¶'V6¶w&÷VæC§&v&ƒ#SRÃ#BÃÃãR“¶6öÆ÷#§f"‚ÒÖvöÆB—Ğ¢æ&FvRÖ×WFVG¶&6¶w&÷VæC§&v&ƒ#SRÃ#SRÃ#SRÃãr“¶6öÆ÷#§f"‚ÒÖ×WFVB—Ğ¢æ&FvR×FVÇ¶&6¶w&÷VæC§&v&ƒÃ##’Ã#SRÃãR“¶6öÆ÷#§f"‚Ò×FVÂ—Ğ¢ç7FB×&÷w¶F—7Æ“¦fÆWƒ¶v£Gƒ¶fÆW‚×w&§w&¶Ö&v–âÖ&÷GFöÓ£#'‡Ğ¢ç7FBÖ&÷‡¶&6¶w&÷VæC§f"‚ÒÖ6&B“¶&÷&FW#£‚6öÆ–Bf"‚ÒÖ&÷&FW"“¶&÷&FW"×&F—W3£ƒ·FF–æs£g‚#ƒ¶fÆWƒ£¶Ö–â×v–GFƒ£3‡Ğ¢ç7FBÖ&÷‚çg¶föçB×6—¦S£#‡ƒ¶föçB×vV–v‡C£ƒĞ¢ç7FBÖ&÷‚ç6Ç¶föçB×6—¦S£ƒ¶6öÆ÷#§f"‚ÒÖ×WFVB“¶Ö&v–â×F÷£'ƒ·Ğ¢çFw¶F—7Æ“¦–æÆ–æRÖ&Æö6³¶&6¶w&÷VæC§&v&ƒ#SRÃ#SRÃ#SRÃã‚“¶&÷&FW"×&F—W3£gƒ·FF–æs£'‚‡ƒ¶föçB×6—¦S£ƒ¶6öÆ÷#§f"‚ÒÖ×WFVB—Ğ¢æV×G‹\İ]^ËX[YÛ˜Ù[\ÜY[™ÎŒŒØÛÛÜ˜\ŠK]]]Y
+_Bˆ™[\K\İ]H™Z^Ù›Û\Ú^™NÛX\™Ú[‹X›İÛNŒLœBˆ™[\K\İ]HÙ›Û\Ú^™NŒMBˆÛÛ˜\Ù\Ü^N™›^ÙØ\ŒLØ[YÛ‹Z][\Î˜Ù[\Ù›^]Ü˜\Ü˜\ÛX\™Ú[‹X›İÛNŒNBˆœÙX\˜ÚX›ŞÙ›^ŒNÛZ[‹]ÚYŒNBˆœÙX\˜ÚX›Ş[œ]İÚYŒL	NØ˜XÚÙÜ›İ[™˜\ŠK\İ\™˜XÙJNØ›Ü™\Œ\ÛÛY˜\ŠKX›Ü™\ŠNØÛÛÜ˜\ŠK]^
+NØ›Ü™\‹\˜Y]\ÎÜY[™ÎLœÙ›Û\Ú^™NŒLÜÛİ][™N››Û™_BˆœÙX\˜ÚX›Ş[œ]™›Øİ\ŞØ›Ü™\‹XÛÛÜ˜\ŠKXXØÙ[
+_BˆÜİ[O‚ÚXY‚›ÙO‚]ˆYH˜\‚ˆ˜]ˆYHœÚYX˜\ˆ‚ˆ]ˆYHœÚYX˜\‹[ÙÛÈO’\İ˜[™OÚOÜ[“XZÙ\ˆXˆÛÛ›ÛÙ[\ÜÜ[Ù]‚ˆ]ˆYH›˜]‹[\İ‚ˆ]ˆÛ\ÜÏH›˜]‹\ÙXİ[Û‹[X™[’ÛYOÙ]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][HXİ]™Hˆ]K\[™[HšÛYHÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸£ ÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[‘\Ú›Ø\™ÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹\ÙXİ[Û‹[X™[Ü˜YÛÛÏÙ]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[HœİX›[X][ÛˆÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¥âÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[”İX›[X][ÛˆXÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[H›\Ù\ˆÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸«(OÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[“\Ù\ˆXÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[Hœš[ÙÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸«(OÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[ŒÑš[XÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[Hœ™XÚ\\ÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¥âOÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[”™XÚ\H›ÛÚÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[H˜ÚXÚÛ\İÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¦$OÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[ÚXÚÛ\İÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹\ÙXİ[Û‹[X™[\Ú[™\ÜÈÛÛÏÙ]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[Hœ›ÙXİÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¼'æã{î#ÏÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[”›ÙXİÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[H˜İ\İÛY\œÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¼'äiOÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[İ\İÛY\œÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[H›Ü™\œÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¼'éïÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[“Ü™\œÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[Hš[™[ÜHÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¥¨ÏÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[’[™[ÜOÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[HœÚİHÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¥áÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[”ÒÕHZ[\ÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[Hœ›Ú™XİÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¥©ÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[”›Ú™XİÙÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[Hœİ\Y\œÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ¸¥ãÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[”İ\Y\œÏÜÜ[Ù]‚ˆ]ˆÛ\ÜÏH›˜]‹Z][Hˆ]K\[™[H˜\ÜÙ]ÈÜ[ˆÛ\ÜÏH›˜]‹ZXÛÛˆ‰ˆÎMŒÌÏÜÜ[Ü[ˆÛ\ÜÏH›˜]‹[X™[\ÜÙ]È	˜[\ÈXØÛİ[ÏÜÜ[Ù]‚ˆÙ]‚ˆ]ˆYHœÚYX˜\‹Y›Ûİ\ˆÜ[¸¦¨OÜÜ[Ü[ˆYH™\‹[X™[ŒKŒKŒÜÜ[Ù]‚ˆÛ˜]‚‚ˆ]ˆYH›XZ[ˆ‚ˆ]ˆYHÜ˜\ˆ]ˆYHÜ˜\‹]]H‘\Ú›Ø\™Ù]]ˆYHÜ˜\‹Y]HÙ]Ù]‚ˆˆ]ˆYH›[Ù[KYœ˜[YH‚ˆKKHÕTÕÓQT”ÈSÑSHS‘SKO‚ˆ]ˆYHœ[™[Xİ\İÛY\œÈˆÛ\ÜÏH›[Ù[K\[™[‚ˆ]ˆÛ\ÜÏHœYÙKZXY\ˆˆİ[OH™\Ü^Nˆ›^È\İYKXÛÛ[ˆÜXÙKX™]ÙY[È[YÛ‹Z][\Îˆ›^\İ\È‚ˆ]‚ˆİ\İÛY\ˆ\™XİÜOÚ‚ˆY™]Èİ\İÛY\ˆ]Z[ÈÜˆ[\Ü^\İ[™È™XÛÜ™ÈÈŞ[˜È\™XİHÈ[İ\ˆÛÛÙÛH]X˜\ÙKÜ‚ˆÙ]‚ˆKKH[\ÜÔÕˆXİ[Ûˆ]ÛˆKO‚ˆ]‚ˆ[œ]\OH™š[HˆYH˜İ\İXÜİ‹Z[œ]ˆXØÙ\H‹˜Üİˆˆİ[OH™\Ü^Nˆ›Û™NÈˆÛ˜Ú[™ÙOHš[\Üİ\İÛY\ÔÕŠ]™[
+H‚ˆ]ÛˆÛ\ÜÏH˜ˆ‹\ÙXÛÛ™\HˆÛ˜ÛXÚÏH™Øİ[Y[™Ù][[Y[RY
+	Øİ\İXÜİ‹Z[œ]	ÊK˜ÛXÚÊ
+H‚ˆ<'äàH[\ÜÔÕ‚ˆØ]Û‚ˆÙ]‚ˆÙ]‚‚ˆ]ˆÛ\ÜÏH˜Ø\™ˆİ[OH›X^]ÚYˆŒÈ‚ˆ›Ü›HYH˜İ\İÛY\‹Y›Ü›HˆÛœİX›Z]HœØ]™Pİ\İÛY\Š]™[
+H‚ˆ]ˆÛ\ÜÏH™šY[ˆİ[OH›X\™Ú[‹X›İÛNˆMÈ‚ˆX™[›ÜH˜İ\İ[˜[YHİ\İÛY\ˆ˜[YOÛX™[‚ˆ[œ]\OH^ˆYH˜İ\İ[˜[YHˆ™\]Z\™YXÙZÛ\H™K™Ëˆ˜[™HÙH‚ˆÙ]‚‚ˆ]ˆÛ\ÜÏH™šY[ˆİ[OH›X\™Ú[‹X›İÛNˆMÈ‚ˆX™[›ÜH˜İ\İY[XZ[‘[XZ[Y™\ÜÏÛX™[‚ˆ[œ]\OH™[XZ[ˆYH˜İ\İY[XZ[ˆ™\]Z\™YXÙZÛ\H™K™Ëˆ˜[™P^[\K˜ÛÛH‚ˆÙ]‚‚ˆ]ˆÛ\ÜÏH™šY[ˆİ[OH›X\™Ú[‹X›İÛNˆMÈ‚ˆX™[›ÜH˜İ\İ\Û™H”Û™H[X™\ÛX™[‚ˆ[œ]\OH[ˆYH˜İ\İ\Û™HˆXÙZÛ\H™K™ËˆMMKLLŒËMMÈ‚ˆÙ]‚‚ˆ]ˆÛ\ÜÏH™šY[ˆİ[OH›X\™Ú[‹X›İÛNˆNÈ‚ˆX™[›ÜH˜İ\İ[›İ\È“›İ\ÈÈ™Y™\™[˜Ù\ÏÛX™[‚ˆ^\™XHYH˜İ\İ[›İ\ÈˆXÙZÛ\H™K™Ëˆ™Y™\œÈ[šÈÛ]\ˆ[X›\ˆš[š\Ú\Èİ^\™XO‚ˆÙ]‚‚ˆ]Ûˆ\OHœİX›Z]ˆÛ\ÜÏH˜ˆ‹\š[X\H”Ø]™Hİ\İÛY\Ø]Û‚ˆÙ›Ü›O‚‚ˆYH˜İ\İÛY\‹\İ]\Èˆİ[OH›X\™Ú[‹]ÜˆMÈ›Û]ÙZYÚˆŒÈ›Û\Ú^™NˆLÜÈÜ‚ˆÙ]‚ˆÙ]‚‚ˆKKHS•‘S•Ô–HSÑSHS‘SKO‚ˆ]ˆYHœ[™[Z[™[ÜHˆÛ\ÜÏH›[Ù[K\[™[‚ˆ]ˆİ[OH˜ÛÛÜˆ˜\ŠK[]]Y
+NÈ^X[YÛˆÙ[\ÈY[™ÎˆÈ‚ˆØY[™È[™[ÜH[Ù[K‹‹‚ˆÙ]‚ˆÙ]‚‚ˆÙ]‚ˆÙ]‚Ù]‚‚KKHØYTHÛÛ™šYÈš\œİKO‚ØÜš\Ü˜ÏH›[Ù[\ËØÛÛ™šYËšœÈÜØÜš\‚KKH^\İ[™È[Ù[\ÈKO‚ØÜš\Ü˜ÏH›[Ù[\ËÚÛYKšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜİX›[X][Û‹šœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜš[ÙšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜ™XÚ\\ËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËØÚXÚÛ\İËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÚ[™[ÜKšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜÚİKšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜ›Ú™XİËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜİ\Y\œËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËØ\ÜÙ]ËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÛ\Ù\‹šœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÜ›ÙXİËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËØİ\İÛY\œËšœÈÜØÜš\‚ØÜš\Ü˜ÏH›[Ù[\ËÛÜ™\œËšœÈÜØÜš\‚‚ØÜš\¾n.classList.toggle('active',n.dataset.panel==
