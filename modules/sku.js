@@ -258,7 +258,7 @@
           };
           items.push(newSku);
           migratedCount++;
-
+          
           // Push row to dynamic database
           if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
             var rowArray = [
@@ -299,7 +299,7 @@
             notes: row[11] || '',
             classification: row[12] || 'Raw Component / Material (BOM Input)'
           })).filter(x => x.sku && x.status !== 'DELETED');
-
+          
           await sv();
         } else {
           items=await window.makerAPI.readData(FILE)||[];
@@ -310,7 +310,7 @@
     } catch(err) {
       items=await window.makerAPI.readData(FILE)||[];
     }
-
+    
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
@@ -348,7 +348,7 @@
       var catBadge='<span style="background:'+catInfo.color+';color:#fff;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:800;font-family:monospace">'+
         (i.cat||'?')+'</span>';
       var margin=(i.price&&i.cost)?((Number(i.price)-Number(i.cost))/Number(i.price)*100).toFixed(1)+'%':'--';
-
+      
       var isRaw = (i.classification || '').includes('Raw');
       var classBadge = isRaw ? '<span class="badge badge-accent">🛠️ Raw</span>' : '<span class="badge badge-teal">🛍️ Etsy</span>';
 
