@@ -19,13 +19,13 @@
       p=document.createElement('div');p.id='panel-products';p.className='module-panel';
       p.innerHTML=`
         <style>
-          #panel-products,
+          #panel-products, 
           #panel-products * {
             -webkit-app-region: no-drag !important;
           }
 
-          #panel-products input,
-          #panel-products textarea,
+          #panel-products input, 
+          #panel-products textarea, 
           #panel-products button,
           #panel-products select,
           #ai-seo-modal,
@@ -159,7 +159,7 @@
         <div id="ai-seo-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
           <div class="card" style="background:var(--surface); width:600px; max-height:90%; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:28px; position:relative; box-shadow:0 10px 40px rgba(0,0,0,0.6); display:flex; flex-direction:column; gap:16px;">
             <h3 style="margin-bottom:4px; font-size:18px; font-weight:700; color:var(--teal);">🤖 AI Etsy Listing &amp; SEO Generator</h3>
-
+            
             <div class="field">
               <label style="color:var(--teal);">Optimized Etsy Title (Max 140 chars)</label>
               <textarea id="ai-seo-title" style="width:100%; height:70px; background:rgba(0,0,0,0.25); border-color:var(--border); color:#fff; font-family:inherit; padding:8px;" readonly></textarea>
@@ -212,22 +212,22 @@
       var cat = g('p-cat').value || "Custom Gift";
       var desc = g('p-desc').value.trim() || "A beautifully styled custom creation.";
       var mNotes = g('p-notes').value.trim() || "Carefully prepared and packaged.";
-
+      
       // Collect material names
       var matNames = bomList.map(function(b) { return b.name; });
       if (matNames.length === 0) matNames = ["Premium Selected Materials"];
-
+      
       // 1. Title Generation
       var title = name + " - Custom " + cat + " - Handmade Gift " + matNames.slice(0,2).join(" & ") + " Design, Personalized Craft";
       if (title.length > 140) {
         title = title.substring(0, 137) + "...";
       }
-
+      
       // 2. Tags (13 tags)
       var tags = ["Handmade Craft", "Custom Gift", "Personalized Decor", cat, "Maker Lab Design", "Premium Material", "Artisan Gift", "Unique Design", "Home Accent", "Custom Made", "Craft Art", matNames[0]];
       if (tags.length < 13) tags.push("Special Gift");
       tags = tags.slice(0, 13).join(", ");
-
+      
       // 3. Description Generation
       var fullDesc = `✨ Welcome to Just Jane Maker Lab! ✨\n\nWe are absolutely thrilled to present our beautifully handcrafted "${name}". Each item is individually built with love, care, and precision in our local studio.\n\n📐 PRODUCT SPECIFICATIONS:\n• Product: ${name}\n• Category Group: ${cat}\n• Styling Details: ${desc}\n\n🌿 EXCLUSIVE MATERIALS USED:\nThis premium piece features the following quality inputs:\n${matNames.map(function(m) { return "  - " + m; }).join("\n")}\n\n💡 QUALITY & CRAFTSMANSHIP:\n${mNotes}\n\n🎁 THE PERFECT GIFT:\nLooking for a unique, memorable gift for birthdays, anniversaries, or special holidays? Supporting independent makers means this item is packed with a personal touch you won't find anywhere else.\n\nThank you for choosing Just Jane Maker Lab! 💖`;
 
@@ -459,16 +459,16 @@
       tbody.appendChild(tr);
     });
 
-    panel.querySelectorAll('.prode').forEach(function(b){
+    p.querySelectorAll('.prode').forEach(function(b){
       b.addEventListener('click',function(){
-        var p=products.find(function(x){return x.id===b.dataset.id;});
-        if(p){
-          editId=p.id;
-          g('p-name').value=p.name;g('p-sku').value=p.sku;g('p-cat').value=p.category;g('p-status').value=p.status;
-          g('p-platforms').value=JSON.stringify(p.platforms);g('p-price').value=p.salePrice;g('p-fee').value=p.etsyFee;
-          g('p-desc').value=p.description;g('p-notes').value=p.notes;
-          g('p-lab-hrs').value=p.labourHrs;g('p-lab-rate').value=p.labourRate;
-          bomList=p.bom.map(function(x){
+        var pItem=products.find(function(x){return x.id===b.dataset.id;});
+        if(pItem){
+          editId=pItem.id;
+          g('p-name').value=pItem.name;g('p-sku').value=pItem.sku;g('p-cat').value=pItem.category;g('p-status').value=pItem.status;
+          g('p-platforms').value=JSON.stringify(pItem.platforms);g('p-price').value=pItem.salePrice;g('p-fee').value=pItem.etsyFee;
+          g('p-desc').value=pItem.description;g('p-notes').value=pItem.notes;
+          g('p-lab-hrs').value=pItem.labourHrs;g('p-lab-rate').value=pItem.labourRate;
+          bomList=pItem.bom.map(function(x){
             return {
               itemId:x.itemId,
               name:x.name,
@@ -482,7 +482,7 @@
       });
     });
 
-    panel.querySelectorAll('.prodd').forEach(function(b){
+    p.querySelectorAll('.prodd').forEach(function(b){
       b.addEventListener('click',async function(){
         if(!confirm('Delete this product?'))return;
         const idToDelete = b.dataset.id;
