@@ -113,7 +113,7 @@
               
               <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
                 <div class="field" style="flex:1">
-                  <label>Select Product Catalog Item</label>
+                  <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select Product Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="products" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
                   <select id="o-item-sel"><option value="">Choose Finished Product...</option></select>
                 </div>
                 <div class="field" style="width:60px">

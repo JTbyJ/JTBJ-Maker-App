@@ -113,7 +113,10 @@
       /* PRODUCT DETAILS */
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
-        '<div class="field" style="flex:1"><label>Brand/Supplier</label><select id="sku-brand" style="font-weight:600;"><option value="">Select Supplier...</option></select></div>'+
+        '<div class="field" style="flex:1">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand/Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
+          '<select id="sku-brand" style="font-weight:600;"><option value="">Select Supplier...</option></select>'+
+        '</div>'+
         '<div class="field" style="flex:1"><label>Classification</label><select id="sku-classification"><option>Raw Component / Material (BOM Input)</option><option>Finished Sellable Product (Etsy/Custom)</option></select></div>'+
         '<div class="field" style="flex:1"><label>Status</label><select id="sku-status"><option>Active</option><option>Draft</option><option>Discontinued</option></select></div>'+
       '</div>'+
