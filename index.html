@@ -124,46 +124,8 @@
     <div id="module-frame">
       <!-- CUSTOMERS MODULE PANEL -->
       <div id="panel-customers" class="module-panel">
-        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-          <div>
-            <h2>Customer Directory</h2>
-            <p>Add new customer details or import existing records to sync directly to your Google Database.</p>
-          </div>
-          <!-- Import CSV Action Button -->
-          <div>
-            <input type="file" id="cust-csv-input" accept=".csv" style="display: none;" onchange="importCustomerCSV(event)">
-            <button class="btn btn-secondary" onclick="document.getElementById('cust-csv-input').click()">
-              📁 Import CSV
-            </button>
-          </div>
-        </div>
-
-        <div class="card" style="max-width: 600px;">
-          <form id="customer-form" onsubmit="saveCustomer(event)">
-            <div class="field" style="margin-bottom: 14px;">
-              <label for="cust-name">Customer Name</label>
-              <input type="text" id="cust-name" required placeholder="e.g. Jane Doe">
-            </div>
-
-            <div class="field" style="margin-bottom: 14px;">
-              <label for="cust-email">Email Address</label>
-              <input type="email" id="cust-email" required placeholder="e.g. jane@example.com">
-            </div>
-
-            <div class="field" style="margin-bottom: 14px;">
-              <label for="cust-phone">Phone Number</label>
-              <input type="tel" id="cust-phone" placeholder="e.g. 555-123-4567">
-            </div>
-
-            <div class="field" style="margin-bottom: 18px;">
-              <label for="cust-notes">Notes / Preferences</label>
-              <textarea id="cust-notes" placeholder="e.g. Prefers pink glitter tumbler finishes"></textarea>
-            </div>
-
-            <button type="submit" class="btn btn-primary">Save Customer</button>
-          </form>
-
-          <p id="customer-status" style="margin-top: 14px; font-weight: 600; font-size: 13px;"></p>
+        <div style="color: var(--muted); text-align: center; padding: 40px 0;">
+          Loading Customers Module...
         </div>
       </div>
 
