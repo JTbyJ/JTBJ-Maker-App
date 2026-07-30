@@ -18,14 +18,37 @@
     if(!p){
       p=document.createElement('div');p.id='panel-orders';p.className='module-panel';
       p.innerHTML=`
+        <style>
+          #panel-orders,
+          #panel-orders * {
+            -webkit-app-region: no-drag !important;
+          }
+
+          #panel-orders input,
+          #panel-orders textarea,
+          #panel-orders button,
+          #panel-orders select {
+            pointer-events: auto !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            position: relative !important;
+            z-index: 99999 !important;
+          }
+        </style>
         <div class="page-header">
           <h2>Sales Orders Directory</h2>
           <p>Record orders, build custom customer invoices, calculate exact margins, and sync transaction lines to your Google Database.</p>
         </div>
 
-        <div style="display:flex;gap:10px;margin-bottom:14px">
-          <button class="btn btn-primary" id="ord-tab-list-btn">Order List</button>
-          <button class="btn btn-ghost" id="ord-tab-form-btn">New Order Form</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
+          <div style="display:flex; gap:10px">
+            <button class="btn btn-primary" id="ord-tab-list-btn">Order List</button>
+            <button class="btn btn-ghost" id="ord-tab-form-btn">New Order Form</button>
+          </div>
+          <div>
+            <input type="file" id="ord-csv-input" accept=".csv" style="display: none;" onchange="importEtsyCSV(event)">
+            <button class="btn btn-secondary" onclick="document.getElementById('ord-csv-input').click()">📁 Import Etsy Order CSV</button>
+          </div>
         </div>
 
         <!-- LIST TAB -->
@@ -90,7 +113,7 @@
               
               <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
                 <div class="field" style="flex:1">
-                  <label>Select Product Catalog Item</label>
+                  <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select Product Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="products" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
                   <select id="o-item-sel"><option value="">Choose Finished Product...</option></select>
                 </div>
                 <div class="field" style="width:60px">
@@ -180,6 +203,12 @@
         cogs:totalCogs,
         profit:profit
       };
+
+      // Auto-deduct inventory if new completed order
+      if (!editId && (obj.status === 'Completed' || obj.status === 'Shipped')) {
+        await autoDeductInventoryForLines(obj.lineItems);
+      }
+
       if(editId){var idx=orders.findIndex(function(x){return x.id===editId;});if(idx>=0)orders[idx]=obj;}
       else orders.unshift(obj);
       await sv();
@@ -199,6 +228,43 @@
     });
     g('ord-cancel-btn').addEventListener('click',function(){clearForm();switchTab('list');});
     g('ord-search').addEventListener('input',renderList);
+  }
+
+  async function autoDeductInventoryForLines(lineItems) {
+    let inventory = [];
+    try { inventory = await window.makerAPI.readData('inventory.json') || []; } catch(e){}
+    let products = [];
+    try { products = await window.makerAPI.readData('products.json') || []; } catch(e){}
+
+    let deductedCount = 0;
+    for (const line of lineItems) {
+      const prod = products.find(p => p.id === line.productId || p.sku === line.productId);
+      if (prod && prod.bom) {
+        for (const bomItem of prod.bom) {
+          const invItem = inventory.find(inv => inv.id === bomItem.itemId);
+          if (invItem) {
+            const qtyToSubtract = (bomItem.qty || 1) * line.qty;
+            invItem.qty = Math.max(0, invItem.qty - qtyToSubtract);
+            deductedCount++;
+
+            // Sync inventory item row to database
+            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              await window.MAKER_CONFIG.saveToDatabase('Inventory', [
+                invItem.id, invItem.sku, invItem.name, invItem.brand, invItem.cat,
+                invItem.subcat, invItem.type, invItem.colour, invItem.qty, invItem.lowStock,
+                invItem.diameter, invItem.weight, invItem.printTemp, invItem.bedTemp,
+                invItem.cost, invItem.location, invItem.supplier, invItem.notes,
+                invItem.unitMetric || 'ea', invItem.metricCapacity || 1
+              ]);
+            }
+          }
+        }
+      }
+    }
+
+    if (deductedCount > 0) {
+      await window.makerAPI.writeData('inventory.json', inventory);
+    }
   }
 
   function switchTab(t){
@@ -364,3 +430,208 @@
     renderLines();
   }
 })();
+
+// Global Etsy CSV Import Listener
+async function importEtsyCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async function (e) {
+    const text = e.target.result;
+    const lines = text.split(/\r\n|\n/);
+    if (lines.length < 2) return;
+
+    // Helper to parse CSV line
+    function parseCSVLine(line) {
+      const result = [];
+      let currentVal = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            currentVal += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(currentVal.trim());
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      result.push(currentVal.trim());
+      return result;
+    }
+
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
+
+    const orderIdIdx = headers.findIndex(h => h.includes('order id') || h === 'id');
+    const dateIdx = headers.findIndex(h => h.includes('sale date') || h.includes('date'));
+    const buyerIdIdx = headers.findIndex(h => h.includes('buyer') || h.includes('user id'));
+    const nameIdx = headers.findIndex(h => h.includes('full name') || h === 'name' || h.includes('recipient'));
+    const emailIdx = headers.findIndex(h => h === 'email' || h.includes('mail'));
+    const itemNameIdx = headers.findIndex(h => h.includes('item name') || h.includes('title'));
+    const qtyIdx = headers.findIndex(h => h === 'quantity' || h === 'qty');
+    const priceIdx = headers.findIndex(h => h === 'price' || h.includes('item total'));
+    const shipIdx = headers.findIndex(h => h === 'shipping');
+
+    // Load dependencies
+    let products = [];
+    try { products = await window.makerAPI.readData('products.json') || []; } catch(e){}
+    let inventory = [];
+    try { inventory = await window.makerAPI.readData('inventory.json') || []; } catch(e){}
+    let customers = [];
+    try { customers = await window.makerAPI.readData('customers.json') || []; } catch(e){}
+    let orders = [];
+    try { orders = await window.makerAPI.readData('orders.json') || []; } catch(e){}
+
+    let orderCount = 0;
+    let customerCount = 0;
+    let stockDeductedCount = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const cols = parseCSVLine(line);
+      if (cols.length === 0 || !cols.some(c => c)) continue;
+
+      const orderNum = orderIdIdx !== -1 ? cols[orderIdIdx] : 'ETS_' + Date.now() + '_' + i;
+      const oDate = dateIdx !== -1 ? cols[dateIdx] : new Date().toISOString().slice(0, 10);
+      const buyerName = nameIdx !== -1 ? cols[nameIdx] : 'Etsy Customer';
+      const buyerEmail = emailIdx !== -1 ? cols[emailIdx] : '';
+      const buyerId = buyerIdIdx !== -1 ? cols[buyerIdIdx] : 'cust_' + Date.now().toString(36);
+      const itemName = itemNameIdx !== -1 ? cols[itemNameIdx] : '';
+      const itemQty = qtyIdx !== -1 ? (parseInt(cols[qtyIdx]) || 1) : 1;
+      const itemPrice = priceIdx !== -1 ? (parseFloat(cols[priceIdx]) || 0) : 0;
+      const shipping = shipIdx !== -1 ? (parseFloat(cols[shipIdx]) || 0) : 0;
+
+      // Skip duplicates
+      if (orders.some(o => o.orderNumber === orderNum)) continue;
+
+      // 1. Customer Auto-Creation
+      let cust = customers.find(c => c.email && buyerEmail && c.email.toLowerCase() === buyerEmail.toLowerCase());
+      if (!cust) {
+        cust = {
+          id: buyerId || 'cust_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4),
+          name: buyerName,
+          email: buyerEmail,
+          phone: '',
+          address: '',
+          source: 'Etsy',
+          isRepeat: false,
+          notes: 'Imported from Etsy Order CSV',
+          etsyUsername: buyerId || '',
+          createdAt: new Date().toISOString().slice(0, 10)
+        };
+        customers.unshift(cust);
+        customerCount++;
+
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          window.MAKER_CONFIG.saveToDatabase('Customers', [
+            cust.id, cust.name, cust.email, cust.phone, cust.address,
+            'Personal', cust.etsyUsername, 'Personal', cust.notes, cust.createdAt
+          ]);
+        }
+      }
+
+      // 2. Lookup Product BOM & Auto-Deduct Inventory Stock
+      let prod = products.find(p => p.name.toLowerCase() === itemName.toLowerCase() || p.sku.toLowerCase() === itemName.toLowerCase());
+      if (!prod && itemName) {
+        prod = products.find(p => itemName.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(itemName.toLowerCase()));
+      }
+
+      let orderBom = [];
+      let calculatedCogs = 0;
+      if (prod) {
+        orderBom = prod.bom || [];
+        calculatedCogs = prod.cogs || 0;
+
+        // Subtract stock for each BOM item
+        for (const bomItem of orderBom) {
+          const invItem = inventory.find(inv => inv.id === bomItem.itemId);
+          if (invItem) {
+            const qtyToDeduct = (bomItem.qty || 1) * itemQty;
+            invItem.qty = Math.max(0, invItem.qty - qtyToDeduct);
+            stockDeductedCount++;
+
+            // Sync updated row to Sheet
+            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              await window.MAKER_CONFIG.saveToDatabase('Inventory', [
+                invItem.id, invItem.sku, invItem.name, invItem.brand, invItem.cat,
+                invItem.subcat, invItem.type, invItem.colour, invItem.qty, invItem.lowStock,
+                invItem.diameter, invItem.weight, invItem.printTemp, invItem.bedTemp,
+                invItem.cost, invItem.location, invItem.supplier, invItem.notes,
+                invItem.unitMetric || 'ea', invItem.metricCapacity || 1
+              ]);
+            }
+          }
+        }
+      }
+
+      // 3. Save Sales Record
+      const totalValue = (itemQty * itemPrice) + shipping;
+      const totalCogs = calculatedCogs * itemQty;
+      const orderObj = {
+        id: 'ord_etsy_' + Date.now() + '_' + i,
+        orderNumber: orderNum,
+        date: oDate,
+        source: 'Etsy',
+        status: 'Completed',
+        paymentStatus: 'Paid',
+        customerId: cust.id,
+        customerName: cust.name,
+        notes: 'Auto-imported Etsy sale of: ' + itemName,
+        lineItems: [{
+          productId: prod ? prod.id : 'custom_item',
+          name: itemName || 'Etsy Item',
+          qty: itemQty,
+          price: itemPrice,
+          cogs: calculatedCogs
+        }],
+        subtotal: itemQty * itemPrice,
+        shipping: shipping,
+        total: totalValue,
+        cogs: totalCogs,
+        profit: totalValue - totalCogs
+      };
+
+      orders.unshift(orderObj);
+      orderCount++;
+
+      // Save Order to Google Sheet
+      if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+        await window.MAKER_CONFIG.saveToDatabase('Orders', [
+          orderObj.id, orderObj.orderNumber, orderObj.date, orderObj.source, orderObj.status,
+          orderObj.paymentStatus, orderObj.customerId, orderObj.customerName, orderObj.notes,
+          JSON.stringify(orderObj.lineItems), orderObj.subtotal, orderObj.shipping,
+          orderObj.total, orderObj.cogs, orderObj.profit
+        ]);
+      }
+    }
+
+    // Save updated databases locally
+    if (orderCount > 0) {
+      await window.makerAPI.writeData('orders.json', orders);
+    }
+    if (customerCount > 0) {
+      await window.makerAPI.writeData('customers.json', customers);
+    }
+    if (stockDeductedCount > 0) {
+      await window.makerAPI.writeData('inventory.json', inventory);
+    }
+
+    // If active view is Order tab, reload
+    if (window.__makerInit_orders) {
+      window.__makerInit_orders();
+    }
+    alert(`Import complete!\n🎉 Orders Imported: ${orderCount}\n👥 New Customers Created: ${customerCount}\n📦 Inventory Items Auto-Deducted: ${stockDeductedCount}`);
+    event.target.value = ''; // Reset input
+  };
+
+  reader.readAsText(file);
+}
