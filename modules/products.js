@@ -459,7 +459,7 @@
       tbody.appendChild(tr);
     });
 
-    p.querySelectorAll('.prode').forEach(function(b){
+    tbody.querySelectorAll('.prode').forEach(function(b){
       b.addEventListener('click',function(){
         var pItem=products.find(function(x){return x.id===b.dataset.id;});
         if(pItem){
@@ -482,7 +482,7 @@
       });
     });
 
-    p.querySelectorAll('.prodd').forEach(function(b){
+    tbody.querySelectorAll('.prodd').forEach(function(b){
       b.addEventListener('click',async function(){
         if(!confirm('Delete this product?'))return;
         const idToDelete = b.dataset.id;

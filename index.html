@@ -170,11 +170,11 @@
 'customers': 'Customers',
 'orders': 'Orders'};
   function activatePanel(id){
+    if(window['__makerInit_'+id])window['__makerInit_'+id]();
     document.querySelectorAll('.module-panel').forEach(p=>p.classList.remove('active'));
     const t=document.getElementById('panel-'+id);if(t)t.classList.add('active');
     navItems.forEach(n=>n.classList.toggle('active',n.dataset.panel===id));
     titleEl.textContent=LABELS[id]||id;
-    if(window['__makerInit_'+id])window['__makerInit_'+id]();
   }
   navItems.forEach(n=>n.addEventListener('click',()=>activatePanel(n.dataset.panel)));
   document.addEventListener('click',e=>{const c=e.target.closest('[data-goto]');if(c)activatePanel(c.dataset.goto);});
