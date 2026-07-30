@@ -14,13 +14,13 @@ window.__makerInit_inventory = function () {
   if (!document.getElementById('inventory-app-container')) {
     container.innerHTML = `
       <style>
-        #panel-inventory, 
+        #panel-inventory,
         #panel-inventory * {
           -webkit-app-region: no-drag !important;
         }
 
-        #panel-inventory input, 
-        #panel-inventory textarea, 
+        #panel-inventory input,
+        #panel-inventory textarea,
         #panel-inventory button,
         #panel-inventory select,
         #inventory-modal,
@@ -93,7 +93,7 @@ window.__makerInit_inventory = function () {
           <h3 id="inv-modal-title" style="margin-bottom:18px; font-size:18px; font-weight:700; color:var(--accent);">Add Inventory Item</h3>
           <form id="inv-form" onsubmit="saveInventoryItemForm(event)">
             <input type="hidden" id="inv-form-id">
-            
+
             <!-- SKU SELECTION (REFERENTIAL INTEGRITY) -->
             <div class="field" style="margin-bottom:14px;">
               <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select SKU Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="sku" onclick="document.getElementById('inventory-modal').style.display='none'" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New SKU</button></div>
@@ -172,7 +172,7 @@ window.__makerInit_inventory = function () {
       <div id="inv-label-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
         <div class="card" style="background:#fff; color:#000; width:450px; border-radius:12px; padding:24px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.5); text-align:center;">
           <h3 style="margin-bottom:12px; font-size:16px; font-weight:700; color:#333;">Print Bin Label</h3>
-          
+
           <!-- PRINT CONTAINER -->
           <div id="printable-label-content" style="border:2px dashed #ccc; padding:20px; border-radius:8px; margin-bottom:20px; background:#fff; display:inline-block; width:100%;">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; text-align:left;">
@@ -213,12 +213,12 @@ function generateQrSvg(text) {
     hash = (hash << 5) - hash + text.charCodeAt(i);
     hash |= 0;
   }
-  
+
   // Grid size 21x21 (standard QR Version 1)
   const size = 21;
   let svg = `<svg viewBox="0 0 ${size} ${size}" width="100%" height="100%" shape-rendering="crispEdges">`;
   svg += `<rect width="${size}" height="${size}" fill="#ffffff"/>`;
-  
+
   // Set finder patterns (the square corners)
   const isFinder = (r, c) => {
     if (r < 7 && c < 7) return true; // Top-Left
@@ -226,7 +226,7 @@ function generateQrSvg(text) {
     if (r >= size - 7 && c < 7) return true; // Bottom-Left
     return false;
   };
-  
+
   const isFinderFilled = (r, c) => {
     // Top-Left Finder
     if (r < 7 && c < 7) {
@@ -425,6 +425,11 @@ function renderInventoryTable(items) {
     const capacity = Number(item.metricCapacity || 1);
     const unitCost = repCost / capacity;
 
+    // Cost calculations
+    const repCost = Number(item.cost || 0);
+    const capacity = Number(item.metricCapacity || 1);
+    const unitCost = repCost / capacity;
+
     return `
       <tr>
         <td>
@@ -480,11 +485,11 @@ function filterInventory() {
 async function openInventoryModal(id = null) {
   const modal = document.getElementById('inventory-modal');
   if (!modal) return;
-  
+
   // Load SKUs
   let skus = [];
   try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
-  
+
   const skuSelect = document.getElementById('inv-form-sku');
   skuSelect.innerHTML = '<option value="">Select SKU...</option>';
   skus.forEach(s => {
@@ -498,7 +503,7 @@ async function openInventoryModal(id = null) {
     opt.dataset.cost = s.cost;
     skuSelect.appendChild(opt);
   });
-  
+
   // Load Suppliers
   let sups = [];
   try { sups = await window.makerAPI.readData('suppliers.json') || []; } catch(e){}
@@ -524,7 +529,7 @@ async function openInventoryModal(id = null) {
     if (item) {
       document.getElementById('inv-form-id').value = item.id;
       document.getElementById('inv-form-sku').value = item.sku;
-      
+
       // Auto-fill locked attributes
       document.getElementById('inv-form-name').value = item.name;
       document.getElementById('inv-form-brand').value = item.brand;
@@ -542,7 +547,7 @@ async function openInventoryModal(id = null) {
       document.getElementById('inv-form-weight').value = item.weight;
       document.getElementById('inv-form-printtemp').value = item.printTemp;
       document.getElementById('inv-form-bedtemp').value = item.bedTemp;
-      
+
       // Cost & Metric
       document.getElementById('inv-form-cost').value = item.cost;
       document.getElementById('inv-form-metric').value = item.unitMetric || 'ea';
@@ -571,13 +576,13 @@ function onInventorySkuChange() {
     document.getElementById('inv-form-brand').value = opt.dataset.brand || '';
     document.getElementById('inv-form-cat').value = opt.dataset.cat || '';
     document.getElementById('inv-form-subcat').value = opt.dataset.subcat || '';
-    
+
     // Default replenishment cost from SKU database
     const costInput = document.getElementById('inv-form-cost');
     if (costInput && (!costInput.value || Number(costInput.value) === 0)) {
       costInput.value = Number(opt.dataset.cost || 0).toFixed(2);
     }
-    
+
     // Choose appropriate default metric
     const cat = opt.dataset.cat;
     const metricSel = document.getElementById('inv-form-metric');
@@ -604,7 +609,7 @@ function onInventoryMetricChange() {
   const metric = document.getElementById('inv-form-metric').value;
   const label = document.getElementById('inv-form-capacity-label');
   const capInp = document.getElementById('inv-form-capacity');
-  
+
   if (metric === 'g') {
     label.textContent = 'Pack Capacity (Grams/Spool)';
     if (capInp.value === '1' || !capInp.value) capInp.value = 1000;
@@ -624,7 +629,7 @@ function calcFormMetricCost() {
   const cost = parseFloat(document.getElementById('inv-form-cost').value) || 0;
   const capacity = parseFloat(document.getElementById('inv-form-capacity').value) || 1;
   const metric = document.getElementById('inv-form-metric').value;
-  
+
   const unitCost = cost / capacity;
   const preview = document.getElementById('inv-form-cost-per-unit-preview');
   preview.textContent = `Cost per Metric Unit: $${unitCost.toFixed(3)} / ${metric}`;
@@ -635,27 +640,27 @@ function calcFormMetricCost() {
  */
 async function saveInventoryItemForm(e) {
   e.preventDefault();
-  
+
   const id = document.getElementById('inv-form-id').value || 'inv_' + Date.now();
   const sku = document.getElementById('inv-form-sku').value;
   const name = document.getElementById('inv-form-name').value;
   const brand = document.getElementById('inv-form-brand').value;
   const cat = document.getElementById('inv-form-cat').value;
   const subcat = document.getElementById('inv-form-subcat').value;
-  
+
   const qty = Number(document.getElementById('inv-form-qty').value) || 0;
   const lowStock = Number(document.getElementById('inv-form-lowstock').value) || 0;
   const supplier = document.getElementById('inv-form-supplier').value;
-  
+
   const type = document.getElementById('inv-form-type').value;
   const colour = document.getElementById('inv-form-colour').value;
   const location = document.getElementById('inv-form-location').value;
-  
+
   const diameter = document.getElementById('inv-form-diameter').value;
   const weight = document.getElementById('inv-form-weight').value;
   const printTemp = document.getElementById('inv-form-printtemp').value;
   const bedTemp = document.getElementById('inv-form-bedtemp').value;
-  
+
   const cost = Number(document.getElementById('inv-form-cost').value) || 0;
   const unitMetric = document.getElementById('inv-form-metric').value;
   const metricCapacity = Number(document.getElementById('inv-form-capacity').value) || 1;
@@ -704,15 +709,15 @@ function editInventoryItem(id) {
 function openLabelModal(id) {
   const item = window.__inventoryCache.find(x => x.id === id);
   if (!item) return;
-  
+
   document.getElementById('lbl-sku').textContent = item.sku || 'NO SKU';
   document.getElementById('lbl-name').textContent = item.name || 'Unnamed Item';
   document.getElementById('lbl-loc').textContent = (item.location || 'NONE').toUpperCase();
-  
+
   // Generate beautiful simulated SVG QR Code representing JTBJ-MAKER-LAB:<sku>
   const qrSvgCode = generateQrSvg(`JTBJ-MAKER-LAB:${item.sku || 'ITEM'}`);
   document.getElementById('lbl-qr-svg').innerHTML = qrSvgCode;
-  
+
   document.getElementById('inv-label-modal').style.display = 'flex';
 }
 
@@ -724,7 +729,7 @@ function printLabelContent() {
   // Use a clean popup window to render ONLY the label card styled for thermal printing!
   const content = document.getElementById('printable-label-content').innerHTML;
   const printWindow = window.open('', '_blank', 'width=500,height=400');
-  
+
   printWindow.document.write(`
     <html>
       <head>

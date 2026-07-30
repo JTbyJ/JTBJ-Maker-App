@@ -19,13 +19,13 @@
       p=document.createElement('div');p.id='panel-orders';p.className='module-panel';
       p.innerHTML=`
         <style>
-          #panel-orders, 
+          #panel-orders,
           #panel-orders * {
             -webkit-app-region: no-drag !important;
           }
 
-          #panel-orders input, 
-          #panel-orders textarea, 
+          #panel-orders input,
+          #panel-orders textarea,
           #panel-orders button,
           #panel-orders select {
             pointer-events: auto !important;
@@ -203,7 +203,7 @@
         cogs:totalCogs,
         profit:profit
       };
-      
+
       // Auto-deduct inventory if new completed order
       if (!editId && (obj.status === 'Completed' || obj.status === 'Shipped')) {
         await autoDeductInventoryForLines(obj.lineItems);
@@ -235,7 +235,7 @@
     try { inventory = await window.makerAPI.readData('inventory.json') || []; } catch(e){}
     let products = [];
     try { products = await window.makerAPI.readData('products.json') || []; } catch(e){}
-    
+
     let deductedCount = 0;
     for (const line of lineItems) {
       const prod = products.find(p => p.id === line.productId || p.sku === line.productId);
@@ -246,7 +246,7 @@
             const qtyToSubtract = (bomItem.qty || 1) * line.qty;
             invItem.qty = Math.max(0, invItem.qty - qtyToSubtract);
             deductedCount++;
-            
+
             // Sync inventory item row to database
             if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
               await window.MAKER_CONFIG.saveToDatabase('Inventory', [
@@ -261,7 +261,7 @@
         }
       }
     }
-    
+
     if (deductedCount > 0) {
       await window.makerAPI.writeData('inventory.json', inventory);
     }
@@ -469,7 +469,7 @@ async function importEtsyCSV(event) {
     }
 
     const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    
+
     const orderIdIdx = headers.findIndex(h => h.includes('order id') || h === 'id');
     const dateIdx = headers.findIndex(h => h.includes('sale date') || h.includes('date'));
     const buyerIdIdx = headers.findIndex(h => h.includes('buyer') || h.includes('user id'));
@@ -530,7 +530,7 @@ async function importEtsyCSV(event) {
         };
         customers.unshift(cust);
         customerCount++;
-        
+
         if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
           window.MAKER_CONFIG.saveToDatabase('Customers', [
             cust.id, cust.name, cust.email, cust.phone, cust.address,
@@ -550,7 +550,7 @@ async function importEtsyCSV(event) {
       if (prod) {
         orderBom = prod.bom || [];
         calculatedCogs = prod.cogs || 0;
-        
+
         // Subtract stock for each BOM item
         for (const bomItem of orderBom) {
           const invItem = inventory.find(inv => inv.id === bomItem.itemId);
