@@ -419,6 +419,21 @@ function renderInventoryTable(items) {
     const isLow = item.qty <= item.lowStock;
     const badgeClass = isLow ? 'badge-red' : 'badge-green';
     const badgeText = isLow ? `Low Stock (${item.qty})` : `In Stock (${item.qty})`;
+    
+    // Cost calculations
+    const repCost = Number(item.cost || 0);
+    const capacity = Number(item.metricCapacity || 1);
+    const unitCost = repCost / capacity;
+
+    // Cost calculations
+    const repCost = Number(item.cost || 0);
+    const capacity = Number(item.metricCapacity || 1);
+    const unitCost = repCost / capacity;
+
+    // Cost calculations
+    const repCost = Number(item.cost || 0);
+    const capacity = Number(item.metricCapacity || 1);
+    const unitCost = repCost / capacity;
 
     // Cost calculations
     const repCost = Number(item.cost || 0);
