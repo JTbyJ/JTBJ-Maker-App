@@ -1,6 +1,7 @@
 /**
  * Just Jane Maker Lab - Customers Module (With In-Memory Caching)
  * Path: modules/customers.js
+ * Version: 1.1.2
  */
 
 // Global cache to persist customer data across tab navigation
