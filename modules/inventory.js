@@ -430,6 +430,11 @@ function renderInventoryTable(items) {
     const capacity = Number(item.metricCapacity || 1);
     const unitCost = repCost / capacity;
 
+    // Cost calculations
+    const repCost = Number(item.cost || 0);
+    const capacity = Number(item.metricCapacity || 1);
+    const unitCost = repCost / capacity;
+
     return `
       <tr>
         <td>
