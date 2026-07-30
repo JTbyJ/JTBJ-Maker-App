@@ -62,7 +62,7 @@
           <div id="hm-alerts-list">
             <p style="color: var(--muted); font-size: 13px;">Loading alerts...</p>
           </div>
-          
+
           <!-- Category Breakdown Placeholder -->
           <div id="hm-category-breakdown"></div>
 
@@ -243,9 +243,9 @@
 
     var totalVal = Object.values(valByCat).reduce((a, b) => a + b, 0);
     var colors = { FIL: 'var(--accent)', MAT: 'var(--gold)', BLK: 'var(--teal)', SUB: 'var(--red)', PKG: 'var(--green)', OTHER: 'var(--muted)' };
-    
+
     var barHtml = '<div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px;"><h4 style="font-size: 13px; font-weight:700; color:var(--teal); margin-bottom: 12px;">📊 Valuation by Category Breakdown</h4><div style="display:flex; height: 16px; border-radius: 6px; overflow:hidden; background: var(--bg); margin-bottom: 8px;">';
-    
+
     if (totalVal > 0) {
       Object.keys(valByCat).forEach(function(cat) {
         var pct = (valByCat[cat] / totalVal * 100);

@@ -96,7 +96,7 @@ window.__makerInit_inventory = function () {
             
             <!-- SKU SELECTION (REFERENTIAL INTEGRITY) -->
             <div class="field" style="margin-bottom:14px;">
-              <label>Select SKU Catalog Item</label>
+              <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select SKU Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="sku" onclick="document.getElementById('inventory-modal').style.display='none'" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New SKU</button></div>
               <select id="inv-form-sku" style="width:100%; font-family:monospace; font-weight:700;" onchange="onInventorySkuChange()" required>
                 <!-- Populated dynamically -->
               </select>
@@ -118,7 +118,7 @@ window.__makerInit_inventory = function () {
               <div class="field" style="flex:1;"><label>Qty in Stock (Packs)</label><input type="number" id="inv-form-qty" required value="1" min="0"></div>
               <div class="field" style="flex:1;"><label>Low Stock Alert</label><input type="number" id="inv-form-lowstock" required value="2" min="0"></div>
               <div class="field" style="flex:1;">
-                <label>Supplier Lookup</label>
+                <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier Lookup</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" onclick="document.getElementById('inventory-modal').style.display='none'" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
                 <select id="inv-form-supplier" style="width:100%;" required>
                   <!-- Populated dynamically from suppliers.json -->
                 </select>
