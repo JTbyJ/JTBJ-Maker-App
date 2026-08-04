@@ -75,7 +75,8 @@
               <h3 style="margin-bottom:14px">Sales Details</h3>
               
               <div style="display:flex;gap:10px;margin-bottom:10px">
-                <div class="field" style="flex:1"><label>Order Number</label><input type="text" id="o-num" required placeholder="e.g. ETSY-10045"></div>
+                <div class="field" style="flex:1"><label>Order Number</label><input type="text" id="o-num" required readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;" placeholder="ORD-10001"></div>
+                <div class="field" style="flex:1"><label>External / 3rd Party ID</label><input type="text" id="o-ext-id" placeholder="e.g. Etsy 31234567"></div>
                 <div class="field" style="flex:1"><label>Date Purchased</label><input type="date" id="o-date" required></div>
               </div>
 
@@ -98,9 +99,15 @@
               </div>
 
               <h3 style="margin-top:20px;margin-bottom:10px">Customer Identification</h3>
+              <div class="field" style="margin-bottom:10px">
+                <label>Select Customer Profile</label>
+                <select id="o-cust-select">
+                  <option value="">-- Choose Existing Customer or Add New --</option>
+                </select>
+              </div>
               <div style="display:flex;gap:10px;margin-bottom:10px">
-                <div class="field" style="flex:1"><label>Customer Name</label><input type="text" id="o-cust-name" required placeholder="Jane Smith"></div>
-                <div class="field" style="flex:1"><label>Customer ID (Optional)</label><input type="text" id="o-cust-id" placeholder="cust_..."></div>
+                <div class="field" style="flex:1"><label>Customer Name *</label><input type="text" id="o-cust-name" required placeholder="Jane Smith"></div>
+                <div class="field" style="flex:1"><label>Customer ID</label><input type="text" id="o-cust-id" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;" placeholder="cust_..."></div>
               </div>
               <div class="field" style="margin-bottom:14px">
                 <label>Order Notes / Personalization Notes</label><textarea id="o-notes" style="min-height:50px" placeholder="Name on tumbler: 'Just Jane' in cursive..."></textarea>
@@ -157,7 +164,42 @@
 
   function setupEvents(){
     g('ord-tab-list-btn').addEventListener('click',function(){switchTab('list');});
-    g('ord-tab-form-btn').addEventListener('click',function(){switchTab('form');});
+    g('ord-tab-form-btn').addEventListener('click',function(){
+      // Generate next serial if creating a new order
+      if (!editId) {
+        g('o-num').value = generateNextOrderNumber();
+      }
+      switchTab('form');
+    });
+
+    // Populate customer info on dropdown selection change
+    g('o-cust-select').addEventListener('change', function() {
+      const val = g('o-cust-select').value;
+      if (val === '__new__') {
+        g('o-cust-name').value = '';
+        g('o-cust-id').value = '';
+        g('o-cust-name').removeAttribute('readonly');
+        g('o-cust-name').style.background = '';
+        g('o-cust-name').focus();
+      } else if (val) {
+        let customers = [];
+        if (window.__customerCache) {
+          customers = window.__customerCache;
+        }
+        const c = customers.find(x => x.id === val);
+        if (c) {
+          g('o-cust-name').value = c.name || '';
+          g('o-cust-id').value = c.id || '';
+          g('o-cust-name').setAttribute('readonly', 'true');
+          g('o-cust-name').style.background = 'rgba(255,255,255,0.04)';
+        }
+      } else {
+        g('o-cust-name').value = '';
+        g('o-cust-id').value = '';
+        g('o-cust-name').removeAttribute('readonly');
+        g('o-cust-name').style.background = '';
+      }
+    });
 
     g('o-item-add').addEventListener('click',function(){
       var id=g('o-item-sel').value;
@@ -186,15 +228,60 @@
       var total=subtotal+ship;
       var profit=total-totalCogs;
 
+      let custId = g('o-cust-id').value;
+      let custName = g('o-cust-name').value.trim();
+
+      // If customer doesn't exist yet (New Customer is chosen or no ID is present)
+      if (!custId && custName) {
+        custId = 'cust_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const newCust = {
+          id: custId,
+          name: custName,
+          email: '',
+          phone: '',
+          address: '',
+          type: 'Personal',
+          igHandle: '',
+          finishPref: '',
+          notes: 'Auto-created via Sales Order ' + g('o-num').value,
+          createdAt: new Date().toISOString().slice(0, 10)
+        };
+        if (!window.__customerCache) window.__customerCache = [];
+        window.__customerCache.unshift(newCust);
+
+        try {
+          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            await window.MAKER_CONFIG.saveToDatabase('Customers', [
+              newCust.id, newCust.name, newCust.email, '',
+              newCust.address, '', '', newCust.type,
+              newCust.notes, newCust.createdAt
+            ]);
+          } else if (window.makerAPI && window.makerAPI.saveRowData) {
+            await window.makerAPI.saveRowData('Customers', [
+              newCust.id, newCust.name, newCust.email, '',
+              newCust.address, '', '', newCust.type,
+              newCust.notes, newCust.createdAt
+            ]);
+          }
+
+          if (window.makerAPI && window.makerAPI.writeData) {
+            await window.makerAPI.writeData('customers.json', window.__customerCache);
+          }
+        } catch (err) {
+          console.error('[Orders] Error auto-creating customer profile:', err);
+        }
+      }
+
       var obj={
         id:editId||'ord_'+Date.now(),
         orderNumber:g('o-num').value,
+        externalId:g('o-ext-id').value.trim(),
         date:g('o-date').value,
         source:g('o-source').value,
         status:g('o-status').value,
         paymentStatus:g('o-pay-status').value,
-        customerId:g('o-cust-id').value||'cust_generic',
-        customerName:g('o-cust-name').value,
+        customerId:custId||'cust_generic',
+        customerName:custName,
         notes:g('o-notes').value,
         lineItems:lines.map(function(l){return {productId:l.productId,name:l.name,qty:l.qty,price:l.price,cogs:l.cogs};}),
         subtotal:subtotal,
@@ -218,7 +305,7 @@
             obj.id, obj.orderNumber, obj.date, obj.source, obj.status,
             obj.paymentStatus, obj.customerId, obj.customerName, obj.notes,
             JSON.stringify(obj.lineItems), obj.subtotal, obj.shipping,
-            obj.total, obj.cogs, obj.profit
+            obj.total, obj.cogs, obj.profit, obj.externalId || ''
           ]);
         }
       } catch (err) {
@@ -286,8 +373,52 @@
     });
   }
 
+  // Auto-generate next sequential order number (e.g. ORD-10001)
+  function generateNextOrderNumber() {
+    let maxNum = 10000;
+    orders.forEach(o => {
+      if (o.orderNumber && o.orderNumber.startsWith('ORD-')) {
+        const num = parseInt(o.orderNumber.replace('ORD-', ''), 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    return 'ORD-' + (maxNum + 1);
+  }
+
+  // Populate Customer Selection dropdown dynamically
+  async function populateCustomerSelect() {
+    const sel = g('o-cust-select');
+    if (!sel) return;
+
+    let customers = [];
+    try {
+      if (window.__customerCache) {
+        customers = window.__customerCache;
+      } else {
+        customers = await window.makerAPI.readData('customers.json') || [];
+        window.__customerCache = customers;
+      }
+    } catch (e) {
+      customers = [];
+    }
+
+    sel.innerHTML = '<option value="">-- Choose Existing Customer or Add New --</option>';
+    sel.innerHTML += '<option value="__new__" style="font-weight:700; color:var(--accent);">+ Add New Customer...</option>';
+
+    // Sort customers by name
+    customers.slice().sort((a,b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.name} (${c.email || 'No Email'})`;
+      sel.appendChild(opt);
+    });
+  }
+
   async function load(){
     await loadProducts();
+    await populateCustomerSelect();
     try {
       let fetchFunc = null;
       if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
@@ -315,7 +446,8 @@
               shipping: parseFloat(row[11]) || 0,
               total: parseFloat(row[12]) || 0,
               cogs: parseFloat(row[13]) || 0,
-              profit: parseFloat(row[14]) || 0
+              profit: parseFloat(row[14]) || 0,
+              externalId: row[15] || ''
             };
           }).filter(x => x.id && x.status !== 'DELETED');
           
@@ -339,11 +471,12 @@
     tbody.innerHTML='';
 
     orders.forEach(function(o){
-      if(q && !o.orderNumber.toLowerCase().includes(q) && !o.customerName.toLowerCase().includes(q) && !o.source.toLowerCase().includes(q))return;
+      const ext = o.externalId || '';
+      if(q && !o.orderNumber.toLowerCase().includes(q) && !o.customerName.toLowerCase().includes(q) && !o.source.toLowerCase().includes(q) && !ext.toLowerCase().includes(q))return;
       var tr=document.createElement('tr');
       var pct=o.total>0?(o.profit/o.total)*100:0;
       tr.innerHTML=`
-        <td><div style="font-weight:700">${o.orderNumber}</div><div style="font-size:11px;color:var(--muted)">${o.date}</div></td>
+        <td><div style="font-weight:700">${o.orderNumber}</div>${ext ? `<div style="font-size:11px;color:var(--accent)">${ext}</div>` : ''}<div style="font-size:11px;color:var(--muted)">${o.date}</div></td>
         <td><div>${o.customerName}</div></td>
         <td><span class="tag">${o.source}</span></td>
         <td><span class="badge ${o.status==='Completed'?'badge-green':(o.status==='Shipped'?'badge-teal':'badge-gold')}">${o.status}</span></td>
@@ -357,13 +490,30 @@
       tbody.appendChild(tr);
     });
 
-    panel.querySelectorAll('.orde').forEach(function(b){
-      b.addEventListener('click',function(){
+    const p = g('panel-orders');
+    p.querySelectorAll('.orde').forEach(function(b){
+      b.addEventListener('click',async function(){
         var o=orders.find(function(x){return x.id===b.dataset.id;});
         if(o){
           editId=o.id;
-          g('o-num').value=o.orderNumber;g('o-date').value=o.date;g('o-source').value=o.source;g('o-status').value=o.status;
-          g('o-pay-status').value=o.paymentStatus;g('o-cust-id').value=o.customerId;g('o-cust-name').value=o.customerName;
+          g('o-num').value=o.orderNumber;
+          g('o-ext-id').value=o.externalId || '';
+          g('o-date').value=o.date;g('o-source').value=o.source;g('o-status').value=o.status;
+          g('o-pay-status').value=o.paymentStatus;
+
+          await populateCustomerSelect();
+          const custSelect = g('o-cust-select');
+          if (o.customerId && o.customerId !== 'cust_generic') {
+            custSelect.value = o.customerId;
+            g('o-cust-name').setAttribute('readonly', 'true');
+            g('o-cust-name').style.background = 'rgba(255,255,255,0.04)';
+          } else {
+            custSelect.value = '';
+            g('o-cust-name').removeAttribute('readonly');
+            g('o-cust-name').style.background = '';
+          }
+
+          g('o-cust-id').value=o.customerId;g('o-cust-name').value=o.customerName;
           g('o-notes').value=o.notes;g('o-ship').value=o.shipping;
           lines=o.lineItems.map(function(x){return {productId:x.productId,name:x.name,qty:x.qty,price:x.price,cogs:x.cogs};});
           renderLines();switchTab('form');
@@ -371,7 +521,7 @@
       });
     });
 
-    panel.querySelectorAll('.ordd').forEach(function(b){
+    p.querySelectorAll('.ordd').forEach(function(b){
       b.addEventListener('click',async function(e){
         e.stopPropagation();
         if(!confirm('Delete order?'))return;
@@ -427,6 +577,9 @@
     g('ord-form').reset();
     g('o-item-qty').value='1';g('o-ship').value='0';
     g('o-date').value=new Date().toISOString().substring(0,10);
+    g('o-cust-name').removeAttribute('readonly');
+    g('o-cust-name').style.background = '';
+    populateCustomerSelect();
     renderLines();
   }
 })();
@@ -510,8 +663,8 @@ async function importEtsyCSV(event) {
       const itemPrice = priceIdx !== -1 ? (parseFloat(cols[priceIdx]) || 0) : 0;
       const shipping = shipIdx !== -1 ? (parseFloat(cols[shipIdx]) || 0) : 0;
 
-      // Skip duplicates
-      if (orders.some(o => o.orderNumber === orderNum)) continue;
+      // Skip duplicates based on externalId
+      if (orders.some(o => o.externalId === orderNum || o.orderNumber === orderNum)) continue;
 
       // 1. Customer Auto-Creation
       let cust = customers.find(c => c.email && buyerEmail && c.email.toLowerCase() === buyerEmail.toLowerCase());
@@ -578,7 +731,8 @@ async function importEtsyCSV(event) {
       const totalCogs = calculatedCogs * itemQty;
       const orderObj = {
         id: 'ord_etsy_' + Date.now() + '_' + i,
-        orderNumber: orderNum,
+        orderNumber: generateNextOrderNumber(),
+        externalId: orderNum,
         date: oDate,
         source: 'Etsy',
         status: 'Completed',
@@ -609,7 +763,7 @@ async function importEtsyCSV(event) {
           orderObj.id, orderObj.orderNumber, orderObj.date, orderObj.source, orderObj.status,
           orderObj.paymentStatus, orderObj.customerId, orderObj.customerName, orderObj.notes,
           JSON.stringify(orderObj.lineItems), orderObj.subtotal, orderObj.shipping,
-          orderObj.total, orderObj.cogs, orderObj.profit
+          orderObj.total, orderObj.cogs, orderObj.profit, orderObj.externalId || ''
         ]);
       }
     }

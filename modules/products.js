@@ -192,7 +192,10 @@
 
   function setupEvents(){
     g('prod-tab-list-btn').addEventListener('click',function(){switchTab('list');});
-    g('prod-tab-form-btn').addEventListener('click',function(){switchTab('form');});
+    g('prod-tab-form-btn').addEventListener('click',function(){
+      clearBuildForm();
+      switchTab('form');
+    });
 
     // Qty Required Dynamic Metric Label on Selected Item change
     g('p-bom-item').addEventListener('change', function() {
@@ -371,7 +374,14 @@
   }
 
   async function loadInventory(){
-    try{invList=await window.makerAPI.readData('inventory.json')||[];}catch(err){invList=[];}
+    try{
+      if (window.__inventoryCache && window.__inventoryCache.length > 0) {
+        invList = window.__inventoryCache;
+      } else {
+        invList=await window.makerAPI.readData('inventory.json')||[];
+        window.__inventoryCache = invList;
+      }
+    }catch(err){invList=[];}
     var sel=g('p-bom-item');if(!sel)return;
     sel.innerHTML='<option value="">Select Raw Item...</option>';
     invList.forEach(function(i){
