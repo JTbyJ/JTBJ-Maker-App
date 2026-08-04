@@ -9,15 +9,16 @@
   var prodList=[];
   var editId=null;
   var lines=[]; // Active items in the form
+  var panel=null;
 
   function g(id){return document.getElementById(id);}
 
   window.__makerInit_orders=function(){
     var frame=g('module-frame');
-    var p=g('panel-orders');
-    if(!p){
-      p=document.createElement('div');p.id='panel-orders';p.className='module-panel';
-      p.innerHTML=`
+    panel=g('panel-orders');
+    if(!panel){
+      panel=document.createElement('div');panel.id='panel-orders';panel.className='module-panel';
+      panel.innerHTML=`
         <style>
           #panel-orders,
           #panel-orders * {
@@ -149,7 +150,7 @@
           </form>
         </div>
       `;
-      frame.appendChild(p);
+      frame.appendChild(panel);
       setupEvents();
     }
     load();
