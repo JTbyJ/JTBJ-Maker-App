@@ -142,7 +142,7 @@ window.__customerCache = null;
         autocompleteContainer.innerHTML = '';
 
         placeAutocomplete = new PlaceAutocompleteElement({
-          requestedTypes: ['address']
+          includedPrimaryTypes: ['address']
         });
 
         // Safe styling using custom element standard CSS variables/properties
