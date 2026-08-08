@@ -1,92 +1,293 @@
-(localData);
-          const remoteStr = JSON.stringify(remoteDataParsed);
-          if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
-            await window.makerAPI.writeData(FILE, remoteDataParsed);
-          }
-        }
-        return;
-      }
-    } catch (err) {
-      console.error('Failed loading remote suppliers:', err);
-    }
+/**
+ * Just Jane Maker Lab - Suppliers Directory Module
+ * Path: modules/suppliers.js
+ */
 
-    items = localData;
-    render();
-  }
-  async function sv(){
-    await window.makerAPI.writeData(FILE,items);
-  }
+window.__suppliersCache = null;
 
-  function render(){
-    var q=g('sup-search').value.toLowerCase();
-    var cf=g('sup-cat-filter').value;
-    var sf=g('sup-stat-filter').value;
-    var rf=parseInt(g('sup-rating-filter').value)||0;
-    var fi=items.filter(function(i){
-      return(!cf||i.category===cf)&&(!sf||i.status===sf)&&
-             (!rf||(i.rating||0)>=rf)&&
-             (!q||JSON.stringify(i).toLowerCase().indexOf(q)>-1);
-    });
+(function(){
+  var FILE = 'suppliers.json';
+  var editId = null;
+  var modalId = null;
+  var frame = document.getElementById('module-frame');
+  var panel = document.createElement('div');
+  panel.id = 'panel-suppliers';
+  panel.className = 'module-panel';
 
-    g('sup-total').textContent=items.length;
-    g('sup-active').textContent=items.filter(function(i){return i.status==='Active';}).length;
-    g('sup-cats').textContent=new Set(items.map(function(i){return i.category;})).size;
-    var rated=items.filter(function(i){return i.rating;});
-    var avgR=rated.length?(rated.reduce(function(s,i){return s+(i.rating||0);},0)/rated.length).toFixed(1):'0.0';
-    g('sup-avg-rating').textContent=avgR;
+  panel.innerHTML =
+    '<style>' +
+    '  #panel-suppliers, #panel-suppliers * { -webkit-app-region: no-drag !important; }' +
+    '  #panel-suppliers input, #panel-suppliers textarea, #panel-suppliers button, #panel-suppliers select {' +
+    '    pointer-events: auto !important;' +
+    '    user-select: text !important;' +
+    '    -webkit-user-select: text !important;' +
+    '    position: relative !important;' +
+    '    z-index: 99999 !important;' +
+    '  }' +
+    '</style>' +
+    '<div class="page-header"><h2>Suppliers Directory</h2><p>Manage raw material suppliers, brand ratings, contact details and active statuses.</p></div>' +
 
-    var sc={Active:'badge-green',Inactive:'badge-muted','On Hold':'badge-gold'};
+    '<div class="stat-row">' +
+      '<div class="stat-box"><div class="sv" style="color:var(--accent)" id="sup-total">0</div><div class="sl">Total Suppliers</div></div>' +
+      '<div class="stat-box"><div class="sv" style="color:var(--green)" id="sup-active">0</div><div class="sl">Active Suppliers</div></div>' +
+      '<div class="stat-box"><div class="sv" style="color:var(--teal)" id="sup-cats">0</div><div class="sl">Total Categories</div></div>' +
+      '<div class="stat-box"><div class="sv" style="color:var(--gold)" id="sup-avg-rating">0.0</div><div class="sl">Avg Rating</div></div>' +
+    '</div>' +
 
-    if(!fi.length){
-      g('sup-grid').innerHTML='<div style="color:var(--text-muted);font-size:14px;grid-column:1/-1;text-align:center;padding:40px">No suppliers found.</div>';
+    '<div class="card" style="margin-bottom:20px">' +
+      '<h3 style="font-size:14px;font-weight:700;margin-bottom:12px" id="sup-form-title">Add New Supplier</h3>' +
+
+      /* FORM ROWS */
+      '<div class="input-row">' +
+        '<div class="field" style="flex:2"><label>Supplier Name</label><input id="sup-name" placeholder="e.g. Filaments.ca"></div>' +
+        '<div class="field" style="flex:1">' +
+          '<label>Category</label>' +
+          '<select id="sup-cat">' +
+            '<option value="Filament">Filament</option>' +
+            '<option value="Equipment">Equipment</option>' +
+            '<option value="Sublimation">Sublimation</option>' +
+            '<option value="Packaging">Packaging</option>' +
+            '<option value="Resin">Resin</option>' +
+            '<option value="Vinyl / HTV">Vinyl / HTV</option>' +
+            '<option value="Blanks">Blanks</option>' +
+            '<option value="Craft Supplies">Craft Supplies</option>' +
+            '<option value="Materials">Materials</option>' +
+            '<option value="Other">Other</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="field" style="flex:1">' +
+          '<label>Status</label>' +
+          '<select id="sup-status">' +
+            '<option value="Active">Active</option>' +
+            '<option value="Inactive">Inactive</option>' +
+            '<option value="On Hold">On Hold</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="field" style="flex:1">' +
+          '<label>Rating</label>' +
+          '<select id="sup-rating">' +
+            '<option value="5">⭐⭐⭐⭐⭐ (5)</option>' +
+            '<option value="4">⭐⭐⭐⭐ (4)</option>' +
+            '<option value="3">⭐⭐⭐ (3)</option>' +
+            '<option value="2">⭐⭐ (2)</option>' +
+            '<option value="1">⭐ (1)</option>' +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="input-row">' +
+        '<div class="field" style="flex:1.5"><label>Website</label><input id="sup-website" placeholder="e.g. filaments.ca"></div>' +
+        '<div class="field" style="flex:1.5"><label>Contact Person</label><input id="sup-contact" placeholder="e.g. Jane Smith"></div>' +
+        '<div class="field" style="flex:2"><label>Email</label><input id="sup-email" type="email" placeholder="e.g. sales@filaments.ca"></div>' +
+        '<div class="field" style="flex:1.5"><label>Phone</label><input id="sup-phone" placeholder="e.g. 1-800-555-0199"></div>' +
+      '</div>' +
+
+      '<div class="input-row">' +
+        '<div class="field" style="flex:1"><label>Lead Time</label><input id="sup-lead" placeholder="e.g. 3-7 business days"></div>' +
+        '<div class="field" style="flex:1"><label>Min Order</label><input id="sup-min" placeholder="e.g. No minimum or $50"></div>' +
+        '<div class="field" style="flex:1.5"><label>Shipping Policy</label><input id="sup-ship" placeholder="e.g. Free shipping over $75"></div>' +
+      '</div>' +
+
+      '<div class="input-row">' +
+        '<div class="field" style="flex:1"><label>Notes / Details</label><textarea id="sup-notes" style="min-height:50px" placeholder="Canadian-based filament supplier. Wide range of PLA..."></textarea></div>' +
+      '</div>' +
+
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button class="btn btn-primary" id="sup-save">Save Supplier</button>' +
+        '<button class="btn btn-ghost" id="sup-cancel" style="display:none">Cancel</button>' +
+      '</div>' +
+    '</div>' +
+
+    /* TOOLBAR */
+    '<div class="toolbar">' +
+      '<div class="search-box"><input id="sup-search" placeholder="Search suppliers by name, notes..."></div>' +
+      '<select id="sup-cat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">' +
+        '<option value="">All Categories</option>' +
+        '<option value="Filament">Filament</option>' +
+        '<option value="Equipment">Equipment</option>' +
+        '<option value="Sublimation">Sublimation</option>' +
+        '<option value="Packaging">Packaging</option>' +
+        '<option value="Resin">Resin</option>' +
+        '<option value="Vinyl / HTV">Vinyl / HTV</option>' +
+        '<option value="Blanks">Blanks</option>' +
+        '<option value="Craft Supplies">Craft Supplies</option>' +
+        '<option value="Materials">Materials</option>' +
+        '<option value="Other">Other</option>' +
+      '</select>' +
+      '<select id="sup-stat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">' +
+        '<option value="">All Statuses</option>' +
+        '<option value="Active">Active</option><option value="Inactive">Inactive</option><option value="On Hold">On Hold</option>' +
+      '</select>' +
+      '<select id="sup-rating-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">' +
+        '<option value="">All Ratings</option>' +
+        '<option value="5">5 Stars</option>' +
+        '<option value="4">4+ Stars</option>' +
+        '<option value="3">3+ Stars</option>' +
+        '<option value="2">2+ Stars</option>' +
+      '</select>' +
+      '<button class="btn btn-ghost" id="sup-sync">🔄 Sync</button>' +
+    '</div>' +
+
+    /* TABLE */
+    '<div class="table-wrap"><table><thead><tr>' +
+      '<th>Name</th><th>Category</th><th>Status</th><th>Rating</th><th>Website</th><th>Contact</th><th>Phone</th><th>Actions</th>' +
+    '</tr></thead><tbody id="sup-tbody"></tbody></table></div>' +
+
+    /* DETAILS MODAL */
+    '<div id="sup-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center">' +
+      '<div class="card" style="width:550px;max-width:90%;position:relative;background:var(--card);border:1px solid var(--border);display:flex;flex-direction:column">' +
+        '<button id="sup-modal-x" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;color:var(--text-muted);cursor:pointer;line-height:1">x</button>' +
+        '<div id="sup-modal-body"></div>' +
+        '<div style="display:flex;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border);justify-content:flex-end">' +
+          '<button class="btn btn-primary" id="sup-modal-edit">Edit This Supplier</button>' +
+          '<button class="btn btn-ghost" id="sup-modal-close">Close</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  frame.appendChild(panel);
+
+  function g(id){return document.getElementById(id);}
+
+  /* ── INITIALIZATION LOADER ── */
+  async function load(forceRefresh = false) {
+    if (!forceRefresh && window.__suppliersCache && Array.isArray(window.__suppliersCache)) {
+      render();
       return;
     }
 
-    g('sup-grid').innerHTML=fi.map(function(i){
-      return '<div class="card" data-id="'+i.id+'" style="cursor:pointer;display:flex;flex-direction:column" title="Click to view full details">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin-bottom:2px">'+esc(i.category)+'</div>'+
-            '<div style="font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(i.name)+'</div>'+
-          '</div>'+
-          '<span class="badge '+(sc[i.status]||'')+'">'+esc(i.status)+'</span>'+
-        '</div>'+
-        '<div style="font-size:15px;margin-bottom:8px">'+starHTML(i.rating||0)+'</div>'+
-        (i.website?'<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">&#127760; '+esc(i.website)+'</div>':'')+
-        (i.lead?'<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">&#128336; '+esc(i.lead)+'</div>':'')+
-        (i.shipping?'<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">&#128666; '+esc(i.shipping)+'</div>':'')+
-        (i.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-bottom:10px;flex:1">'+esc(i.notes.substring(0,100))+(i.notes.length>100?'...':'')+'</div>':'<div style="flex:1"></div>')+
-        '<div style="display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'+
-          '<button class="btn btn-primary btn-sm supv" data-id="'+i.id+'" style="flex:1">View Details</button>'+
-          '<button class="btn btn-ghost btn-sm supe" data-id="'+i.id+'">Edit</button>'+
-          '<button class="btn btn-danger btn-sm supd" data-id="'+i.id+'">Del</button>'+
-        '</div>'+
-      '</div>';
-    }).join('');
+    var localData = [];
+    try {
+      localData = await window.makerAPI.readData(FILE) || [];
+    } catch(e) {}
 
-    panel.querySelectorAll('#sup-grid .card').forEach(function(card){
-      card.addEventListener('click',function(e){if(e.target.closest('button'))return;showModal(card.dataset.id);});
+    try {
+      let fetchFunc = null;
+      if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
+        fetchFunc = window.MAKER_CONFIG.fetchFromDatabase;
+      }
+      if (fetchFunc) {
+        const remoteData = await fetchFunc('Suppliers');
+        if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
+          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
+          window.__suppliersCache = remoteData.slice(startIndex).map(row => {
+            return {
+              id: row[0] || '',
+              name: row[1] || '',
+              category: row[2] || 'Filament',
+              status: row[3] || 'Active',
+              rating: parseInt(row[4]) || 5,
+              website: row[5] || '',
+              contact: row[6] || '',
+              email: row[7] || '',
+              phone: row[8] || '',
+              lead: row[9] || '',
+              minOrder: row[10] || '',
+              shipping: row[11] || '',
+              notes: row[12] || ''
+            };
+          }).filter(x => x.id && x.status !== 'DELETED');
+
+          await window.makerAPI.writeData(FILE, window.__suppliersCache);
+          render();
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('[Suppliers] Failed loading remote suppliers:', err);
+    }
+
+    window.__suppliersCache = localData;
+    render();
+  }
+
+  async function sv(){
+    await window.makerAPI.writeData(FILE, window.__suppliersCache || []);
+  }
+
+  /* ── RENDER TABLE ── */
+  function render() {
+    var items = window.__suppliersCache || [];
+    var q = g('sup-search').value.toLowerCase();
+    var cf = g('sup-cat-filter').value;
+    var sf = g('sup-stat-filter').value;
+    var rf = parseInt(g('sup-rating-filter').value) || 0;
+
+    var fi = items.filter(function(i){
+      var catOk = !cf || i.category === cf;
+      var statOk = !sf || i.status === sf;
+      var ratingOk = !rf || (i.rating || 0) >= rf;
+      var qOk = !q || JSON.stringify(i).toLowerCase().indexOf(q) > -1;
+      return catOk && statOk && ratingOk && qOk;
     });
-    panel.querySelectorAll('.supv').forEach(function(b){b.addEventListener('click',function(){showModal(b.dataset.id);});});
-    panel.querySelectorAll('.supe').forEach(function(b){
-      b.addEventListener('click',function(){
-        var i=items.find(function(x){return x.id===b.dataset.id;});if(!i)return;
-        editId=b.dataset.id;
-        g('sup-name').value=i.name||'';g('sup-cat').value=i.category||'Filament';
-        g('sup-status').value=i.status||'Active';g('sup-rating').value=String(i.rating||5);
-        g('sup-website').value=i.website||'';g('sup-contact').value=i.contact||'';
-        g('sup-email').value=i.email||'';g('sup-phone').value=i.phone||'';
-        g('sup-lead').value=i.lead||'';g('sup-min').value=i.minOrder||'';
-        g('sup-ship').value=i.shipping||'';g('sup-notes').value=i.notes||'';
-        g('sup-form-title').textContent='Edit Supplier';g('sup-cancel').style.display='inline-flex';
-        panel.scrollIntoView({behavior:'smooth',block:'start'});
+
+    /* Render stats */
+    g('sup-total').textContent = items.length;
+    g('sup-active').textContent = items.filter(function(i){return i.status === 'Active';}).length;
+    g('sup-cats').textContent = new Set(items.map(function(i){return i.category;})).size;
+    var rated = items.filter(function(i){return i.rating;});
+    var avgR = rated.length ? (rated.reduce(function(s, i){return s + (i.rating || 0);}, 0) / rated.length).toFixed(1) : '0.0';
+    g('sup-avg-rating').textContent = avgR;
+
+    /* Status colours mapping */
+    var sc = {Active: 'badge-green', Inactive: 'badge-muted', 'On Hold': 'badge-gold'};
+
+    g('sup-tbody').innerHTML = fi.length ? fi.map(function(i){
+      var websiteLink = i.website ? '<a href="https://' + esc(i.website) + '" target="_blank" style="color:var(--accent);text-decoration:none">&#127760; ' + esc(i.website) + '</a>' : '—';
+      return '<tr class="sup-row" data-id="' + i.id + '" style="cursor:pointer" title="Click to view full details">' +
+        '<td style="font-weight:700;color:var(--text)">' + esc(i.name) + '</td>' +
+        '<td><span class="badge badge-accent">' + esc(i.category) + '</span></td>' +
+        '<td><span class="badge ' + (sc[i.status] || '') + '">' + esc(i.status) + '</span></td>' +
+        '<td style="font-size:14px">' + starHTML(i.rating || 0) + '</td>' +
+        '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + websiteLink + '</td>' +
+        '<td>' + esc(i.contact || '—') + '</td>' +
+        '<td>' + esc(i.phone || '—') + '</td>' +
+        '<td>' +
+          '<button class="btn btn-ghost btn-sm supe" data-id="' + i.id + '">Edit</button> ' +
+          '<button class="btn btn-danger btn-sm supd" data-id="' + i.id + '">Del</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('') : '<tr><td colspan="8" class="empty-state"><p>No suppliers found. Add your first one above!</p></td></tr>';
+
+    /* Attach Row click detail viewers */
+    panel.querySelectorAll('#sup-tbody .sup-row').forEach(function(row){
+      row.addEventListener('click', function(e){
+        if (e.target.closest('button') || e.target.closest('a')) return;
+        showModal(row.dataset.id);
       });
     });
+
+    /* Attach Edit and Delete button events */
+    panel.querySelectorAll('.supe').forEach(function(b){
+      b.addEventListener('click', function(e){
+        e.stopPropagation();
+        var i = items.find(function(x){return x.id === b.dataset.id;});
+        if (!i) return;
+        editId = b.dataset.id;
+        g('sup-name').value = i.name || '';
+        g('sup-cat').value = i.category || 'Filament';
+        g('sup-status').value = i.status || 'Active';
+        g('sup-rating').value = String(i.rating || 5);
+        g('sup-website').value = i.website || '';
+        g('sup-contact').value = i.contact || '';
+        g('sup-email').value = i.email || '';
+        g('sup-phone').value = i.phone || '';
+        g('sup-lead').value = i.lead || '';
+        g('sup-min').value = i.minOrder || '';
+        g('sup-ship').value = i.shipping || '';
+        g('sup-notes').value = i.notes || '';
+        g('sup-form-title').textContent = 'Edit Supplier';
+        g('sup-cancel').style.display = 'inline-flex';
+        panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+      });
+    });
+
     panel.querySelectorAll('.supd').forEach(function(b){
-      b.addEventListener('click',async function(){
-        if(!confirm('Delete this supplier?'))return;
+      b.addEventListener('click', async function(e){
+        e.stopPropagation();
+        if (!confirm('Delete this supplier?')) return;
         const idToDelete = b.dataset.id;
-        items=items.filter(function(x){return x.id!==idToDelete;});
+        window.__suppliersCache = window.__suppliersCache.filter(function(x){return x.id !== idToDelete;});
         await sv();
         try {
           if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
@@ -100,24 +301,91 @@
     });
   }
 
-  g('sup-save').addEventListener('click',async function(){
-    var name=g('sup-name').value.trim();if(!name){alert('Please enter a supplier name.');return;}
-    var obj={
-      id:editId||Date.now().toString(36)+Math.random().toString(36).sliice(2,6),
-      name:name,category:g('sup-cat').value,status:g('sup-status').value,
-      rating:parseInt(g('sup-rating').value)||5,
-      website:g('sup-website').value.trim(),contact:g('sup-contact').value.trim(),
-      email:g('sup-email').value.trim(),phone:g('sup-phone').value.trim(),
-      lead:g('sup-lead').value.trim(),minOrder:g('sup-min').value.trim(),
-      shipping:g('sup-ship').value.trim(),notes:g('sup-notes').value.trim()
+  /* ── DETAILS MODAL ── */
+  function showModal(id) {
+    var items = window.__suppliersCache || [];
+    var i = items.find(function(x){return x.id === id;});
+    if (!i) return;
+    modalId = id;
+
+    g('sup-modal-body').innerHTML =
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-right:30px">' +
+        '<div>' +
+          '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin-bottom:4px">' + esc(i.category) + '</div>' +
+          '<h3 style="font-size:20px;font-weight:800;margin:0">' + esc(i.name) + '</h3>' +
+        '</div>' +
+        '<div style="font-size:18px">' + starHTML(i.rating || 0) + '</div>' +
+      '</div>' +
+      '<h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Contact details</h4>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">' +
+        mf('Website', i.website ? '<a href="https://' + esc(i.website) + '" target="_blank" style="color:var(--accent)">' + esc(i.website) + '</a>' : '') +
+        mf('Contact Person', i.contact) +
+        mf('Email', i.email ? '<a href="mailto:' + esc(i.email) + '" style="color:var(--accent)">' + esc(i.email) + '</a>' : '') +
+        mf('Phone', i.phone) +
+      '</div>' +
+      '<h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Shipping &amp; Fulfillment</h4>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">' +
+        mf('Lead Time', i.lead) +
+        mf('Min Order', i.minOrder) +
+        mf('Shipping Policy', i.shipping) +
+      '</div>' +
+      (i.notes ? '<h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Notes &amp; Description</h4>' +
+                 '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)">' + esc(i.notes) + '</div>' : '');
+
+    g('sup-modal').style.display = 'flex';
+  }
+
+  function mf(label, val) {
+    if (!val) return '';
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">' +
+      '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:4px">' + label + '</div>' +
+      '<div style="font-size:14px">' + val + '</div></div>';
+  }
+
+  g('sup-modal').addEventListener('click', function(e){
+    if (e.target === g('sup-modal')) g('sup-modal').style.display = 'none';
+  });
+  g('sup-modal-x').addEventListener('click', function(){g('sup-modal').style.display = 'none';});
+  g('sup-modal-close').addEventListener('click', function(){g('sup-modal').style.display = 'none';});
+  g('sup-modal-edit').addEventListener('click', function(){
+    g('sup-modal').style.display = 'none';
+    if (!modalId) return;
+    var btn = panel.querySelector('.supe[data-id="' + modalId + '"]');
+    if (btn) btn.click();
+  });
+
+  /* ── FORM SAVE ACTION ── */
+  g('sup-save').addEventListener('click', async function(){
+    var name = g('sup-name').value.trim();
+    if (!name) { alert('Please enter a supplier name.'); return; }
+
+    var obj = {
+      id: editId || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: name,
+      category: g('sup-cat').value,
+      status: g('sup-status').value,
+      rating: parseInt(g('sup-rating').value) || 5,
+      website: g('sup-website').value.trim(),
+      contact: g('sup-contact').value.trim(),
+      email: g('sup-email').value.trim(),
+      phone: formatPhoneNumber(g('sup-phone').value.trim()),
+      lead: g('sup-lead').value.trim(),
+      minOrder: g('sup-min').value.trim(),
+      shipping: g('sup-ship').value.trim(),
+      notes: g('sup-notes').value.trim()
     };
-    if(editId){var idx=items.findIndex(function(x){return x.id===editId;});if(idx>=0)items[idx]=obj;}
-    else items.unshift(obj);
-    editId=null;
-    g('sup-form-title').textContent='Add Supplier';gg('sup-cancel').style.display='none';
-    ['sup-name','sup-website','sup-contact','sup-email','sup-phone','sup-lead','sup-min','sup-ship','sup-notes'].forEach(function(id){g(id).value='';});
-    g('sup-cat').value='Filament';g('sup-status').value='Active';g('sup-rating').value='5';
+
+    if (editId) {
+      var idx = window.__suppliersCache.findIndex(function(x){return x.id === editId;});
+      if (idx >= 0) window.__suppliersCache[idx] = obj;
+    } else {
+      window.__suppliersCache.unshift(obj);
+    }
+
+    clearForm();
     await sv();
+    render();
+
     try {
       if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
         await window.MAKER_CONFIG.saveToDatabase('Suppliers', [
@@ -129,15 +397,56 @@
     } catch (err) {
       console.error('[Suppliers] Error syncing to remote sheet:', err);
     }
-    render();
   });
-  g('sup-cancel').addEventListener('click',function(){
-    editId=null;g('sup-form-title').textContent='Add Supplier';g('sup-cancel').style.display='none';
-  });
-  g('sup-search').addEventListener('input',render);
-  g('sup-cat-filter').addEventListener('change',render);
-  g('sup-stat-filter').addEventListener('change',render);
-  g('sup-rating-filter').addEventListener('change',render);
 
-  window.__makerInit_suppliers=load;
+  function clearForm(){
+    editId = null;
+    g('sup-form-title').textContent = 'Add New Supplier';
+    g('sup-cancel').style.display = 'none';
+    ['sup-name','sup-website','sup-contact','sup-email','sup-phone','sup-lead','sup-min','sup-ship','sup-notes'].forEach(function(id){
+      g(id).value = '';
+    });
+    g('sup-cat').value = 'Filament';
+    g('sup-status').value = 'Active';
+    g('sup-rating').value = '5';
+  }
+
+  g('sup-cancel').addEventListener('click', clearForm);
+  g('sup-search').addEventListener('input', render);
+  g('sup-cat-filter').addEventListener('change', render);
+  g('sup-stat-filter').addEventListener('change', render);
+  g('sup-rating-filter').addEventListener('change', render);
+  g('sup-sync').addEventListener('click', function(){ load(true); });
+
+  /* ── HELPERS ── */
+  function starHTML(rating) {
+    var full = '★', empty = '☆', str = '';
+    for (var i = 1; i <= 5; i++) {
+      str += (i <= rating) ? full : empty;
+    }
+    return str;
+  }
+
+  function esc(v) {
+    return String(v === undefined || v === null ? '' : v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatPhoneNumber(phone) {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length === 10) {
+      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    } else if (digits.length === 11 && digits.startsWith('1')) {
+      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    } else if (digits.length > 0) {
+      return `+${digits}`;
+    }
+    return phone;
+  }
+
+  window.__makerInit_suppliers = load;
 })();
