@@ -1,5 +1,5 @@
 🛠️ Maker Lab Architecture & Module Coding Standards
-Document Version: 1.1.2
+Document Version: 1.1.3
 
 Target Environment: Electron / Vanilla JS Frontend + Google Sheets Backend API
 
@@ -45,6 +45,8 @@ Global Memory Stores: Data fetched from Google Sheets is stored in global memory
 window.__inventoryCache for Inventory items[cite: 5].
 
 window.__customerCache for Customer profiles[cite: 5].
+
+window.__suppliersCache for Supplier profiles.
 
 Instant Tab Switching: When navigating between app modules, the module's initializer checks if its corresponding window.__<module>Cache object exists[cite: 5]. If populated, it renders instantly from local memory instead of making a new network request[cite: 5].
 
@@ -96,6 +98,23 @@ O	Cost	cost	0
 P	Location	location	''
 Q	Supplier	supplier	''
 R	Notes	notes	''
+
+C. Suppliers Sheet Mapping
+Column	Sheet Header	JavaScript Property	Default / Fallback
+A	Supplier_ID	id	Generated Hash
+B	Name	name	'Unnamed'
+C	Category	category	'Filament'
+D	Status	status	'Active'
+E	Rating	rating	5
+F	Website	website	''
+G	Contact_Person	contact	''
+H	Email	email	''
+I	Phone	phone	'' (Formatted +1)
+J	Lead_Time	lead	''
+K	Min_Order	minOrder	''
+L	Shipping_Policy	shipping	''
+M	Notes	notes	''
+
 5. Required Utility Helpers
 Copy these utility functions into every module script (or a shared utils.js library) to maintain data consistency[cite: 6].
 

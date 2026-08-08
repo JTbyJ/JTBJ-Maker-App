@@ -42,8 +42,86 @@ window.__makerInit_inventory = function () {
             <button class="btn btn-ghost" onclick="loadInventory(true)">🔄 Sync</button>
             <input type="file" id="inv-csv-input" accept=".csv" style="display: none;" onchange="importInventoryCSV(event)">
             <button class="btn btn-secondary" onclick="document.getElementById('inv-csv-input').click()">📁 Import CSV</button>
-            <button class="btn btn-primary" onclick="openInventoryModal()">+ Add Item</button>
           </div>
+        </div>
+
+        <!-- PERMANENT TOP FORM CARD -->
+        <div class="card" style="margin-bottom: 24px;">
+          <h3 id="inv-form-title" style="margin-bottom:18px; font-size:15px; font-weight:700; color:var(--accent);">Add Inventory Item</h3>
+          <form id="inv-form" onsubmit="saveInventoryItemForm(event)">
+            <input type="hidden" id="inv-form-id">
+
+            <!-- SKU SELECTION (REFERENTIAL INTEGRITY) -->
+            <div class="field" style="margin-bottom:14px;">
+              <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select SKU Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="sku" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New SKU</button></div>
+              <select id="inv-form-sku" style="width:100%; font-family:monospace; font-weight:700;" onchange="onInventorySkuChange()" required>
+                <!-- Populated dynamically -->
+              </select>
+              <small style="color:var(--muted); margin-top:4px; display:block;">Choosing a SKU auto-fills Name, Category, Subcategory, and Brand from SKU database.</small>
+            </div>
+
+            <div class="input-row">
+              <div class="field" style="flex:2;"><label>Name</label><input type="text" id="inv-form-name" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
+              <div class="field" style="flex:1;"><label>Brand</label><input type="text" id="inv-form-brand" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
+            </div>
+
+            <div class="input-row">
+              <div class="field" style="flex:1;"><label>Category</label><input type="text" id="inv-form-cat" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
+              <div class="field" style="flex:1;"><label>Subcategory</label><input type="text" id="inv-form-subcat" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
+            </div>
+
+            <!-- STOCK & SUPPLIER DETAILS -->
+            <div class="input-row">
+              <div class="field" style="flex:1;"><label>Qty in Stock (Packs)</label><input type="number" id="inv-form-qty" required value="1" min="0"></div>
+              <div class="field" style="flex:1;"><label>Low Stock Alert</label><input type="number" id="inv-form-lowstock" required value="2" min="0"></div>
+              <div class="field" style="flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier Lookup</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
+                <select id="inv-form-supplier" style="width:100%;" required>
+                  <!-- Populated dynamically from suppliers.json -->
+                </select>
+              </div>
+            </div>
+
+            <!-- PHYSICAL DETAILS -->
+            <div class="input-row">
+              <div class="field" style="flex:1;"><label>Type / Specs (e.g. PLA)</label><input type="text" id="inv-form-type" placeholder="Type Details"></div>
+              <div class="field" style="flex:1;"><label>Colour / Finish</label><input type="text" id="inv-form-colour" placeholder="Colour"></div>
+              <div class="field" style="flex:1;"><label>Storage Location</label><input type="text" id="inv-form-location" placeholder="e.g. Filament Box A"></div>
+            </div>
+
+            <div class="input-row">
+              <div class="field" style="flex:1;"><label>Diameter (e.g. 1.75mm)</label><input type="text" id="inv-form-diameter"></div>
+              <div class="field" style="flex:1;"><label>Weight (e.g. 1kg)</label><input type="text" id="inv-form-weight"></div>
+              <div class="field" style="flex:1;"><label>Print Temp (C)</label><input type="text" id="inv-form-printtemp"></div>
+              <div class="field" style="flex:1;"><label>Bed Temp (C)</label><input type="text" id="inv-form-bedtemp"></div>
+            </div>
+
+            <!-- COSTING & UNIT METRIC -->
+            <div style="border:1px solid var(--border); padding:16px; border-radius:10px; margin-bottom:16px; background:rgba(255,255,255,0.01);">
+              <h4 style="font-size:12px; text-transform:uppercase; color:var(--accent); margin-bottom:12px; font-weight:700;">Replenishment Costing & Unit Metric</h4>
+              <div class="input-row">
+                <div class="field" style="flex:1;"><label>Replenishment Cost ($)</label><input type="number" id="inv-form-cost" step="0.01" required value="0.00" oninput="calcFormMetricCost()"></div>
+                <div class="field" style="flex:1;">
+                  <label>Unit Metric</label>
+                  <select id="inv-form-metric" required onchange="onInventoryMetricChange(); calcFormMetricCost();">
+                    <option value="g">⚖️ Per Gram (g)</option>
+                    <option value="m">📏 Per Meter (m)</option>
+                    <option value="sh">📄 Per Sheet (sh)</option>
+                    <option value="ea">📦 Per Item (ea)</option>
+                  </select>
+                </div>
+                <div class="field" style="flex:1;"><label id="inv-form-capacity-label">Pack Metric Capacity</label><input type="number" id="inv-form-capacity" step="any" required value="1" oninput="calcFormMetricCost()"></div>
+              </div>
+              <div style="font-size:13px; font-weight:700; color:var(--green); margin-top:8px;" id="inv-form-cost-per-unit-preview">Cost per Metric Unit: $0.00</div>
+            </div>
+
+            <div class="field" style="margin-bottom:18px;"><label>Description / Notes</label><textarea id="inv-form-notes" placeholder="Additional details..."></textarea></div>
+
+            <div style="display:flex; gap:10px; justify-content:flex-start;">
+              <button type="button" class="btn btn-ghost" onclick="clearInventoryForm()" id="inv-cancel-btn" style="display:none;">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="inv-save-btn">Save Item</button>
+            </div>
+          </form>
         </div>
 
         <div class="toolbar">
@@ -87,87 +165,6 @@ window.__makerInit_inventory = function () {
         </div>
       </div>
 
-      <!-- INVENTORY MODAL FORM -->
-      <div id="inventory-modal" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.65); align-items:center; justify-content:center;">
-        <div class="card" style="background:var(--surface); width:650px; max-height:92%; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:28px; position:relative; box-shadow:0 10px 45px rgba(0,0,0,0.6);">
-          <h3 id="inv-modal-title" style="margin-bottom:18px; font-size:18px; font-weight:700; color:var(--accent);">Add Inventory Item</h3>
-          <form id="inv-form" onsubmit="saveInventoryItemForm(event)">
-            <input type="hidden" id="inv-form-id">
-
-            <!-- SKU SELECTION (REFERENTIAL INTEGRITY) -->
-            <div class="field" style="margin-bottom:14px;">
-              <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select SKU Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="sku" onclick="document.getElementById('inventory-modal').style.display='none'" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New SKU</button></div>
-              <select id="inv-form-sku" style="width:100%; font-family:monospace; font-weight:700;" onchange="onInventorySkuChange()" required>
-                <!-- Populated dynamically -->
-              </select>
-              <small style="color:var(--muted); margin-top:4px; display:block;">Choosing a SKU auto-fills Name, Category, Subcategory, and Brand from SKU database.</small>
-            </div>
-
-            <div class="input-row">
-              <div class="field" style="flex:2;"><label>Name</label><input type="text" id="inv-form-name" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
-              <div class="field" style="flex:1;"><label>Brand</label><input type="text" id="inv-form-brand" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
-            </div>
-
-            <div class="input-row">
-              <div class="field" style="flex:1;"><label>Category</label><input type="text" id="inv-form-cat" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
-              <div class="field" style="flex:1;"><label>Subcategory</label><input type="text" id="inv-form-subcat" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
-            </div>
-
-            <!-- STOCK & SUPPLIER DETAILS -->
-            <div class="input-row">
-              <div class="field" style="flex:1;"><label>Qty in Stock (Packs)</label><input type="number" id="inv-form-qty" required value="1" min="0"></div>
-              <div class="field" style="flex:1;"><label>Low Stock Alert</label><input type="number" id="inv-form-lowstock" required value="2" min="0"></div>
-              <div class="field" style="flex:1;">
-                <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier Lookup</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" onclick="document.getElementById('inventory-modal').style.display='none'" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
-                <select id="inv-form-supplier" style="width:100%;" required>
-                  <!-- Populated dynamically from suppliers.json -->
-                </select>
-              </div>
-            </div>
-
-            <!-- PHYSICAL DETAILS -->
-            <div class="input-row">
-              <div class="field" style="flex:1;"><label>Type / Specs (e.g. PLA)</label><input type="text" id="inv-form-type" placeholder="Type Details"></div>
-              <div class="field" style="flex:1;"><label>Colour / Finish</label><input type="text" id="inv-form-colour" placeholder="Colour"></div>
-              <div class="field" style="flex:1;"><label>Storage Location</label><input type="text" id="inv-form-location" placeholder="e.g. Filament Box A"></div>
-            </div>
-
-            <div class="input-row">
-              <div class="field" style="flex:1;"><label>Diameter (e.g. 1.75mm)</label><input type="text" id="inv-form-diameter"></div>
-              <div class="field" style="flex:1;"><label>Weight (e.g. 1kg)</label><input type="text" id="inv-form-weight"></div>
-              <div class="field" style="flex:1;"><label>Print Temp (C)</label><input type="text" id="inv-form-printtemp"></div>
-              <div class="field" style="flex:1;"><label>Bed Temp (C)</label><input type="text" id="inv-form-bedtemp"></div>
-            </div>
-
-            <!-- COSTING & UNIT METRIC -->
-            <div style="border:1px solid var(--border); padding:16px; border-radius:10px; margin-bottom:16px; background:rgba(255,255,255,0.01);">
-              <h4 style="font-size:12px; text-transform:uppercase; color:var(--accent); margin-bottom:12px; font-weight:700;">Replenishment Costing & Unit Metric</h4>
-              <div class="input-row">
-                <div class="field" style="flex:1;"><label>Replenishment Cost ($)</label><input type="number" id="inv-form-cost" step="0.01" required value="0.00" oninput="calcFormMetricCost()"></div>
-                <div class="field" style="flex:1;">
-                  <label>Unit Metric</label>
-                  <select id="inv-form-metric" required onchange="onInventoryMetricChange(); calcFormMetricCost();">
-                    <option value="g">⚖️ Per Gram (g)</option>
-                    <option value="m">📏 Per Meter (m)</option>
-                    <option value="sh">📄 Per Sheet (sh)</option>
-                    <option value="ea">📦 Per Item (ea)</option>
-                  </select>
-                </div>
-                <div class="field" style="flex:1;"><label id="inv-form-capacity-label">Pack Metric Capacity</label><input type="number" id="inv-form-capacity" step="any" required value="1" oninput="calcFormMetricCost()"></div>
-              </div>
-              <div style="font-size:13px; font-weight:700; color:var(--green); margin-top:8px;" id="inv-form-cost-per-unit-preview">Cost per Metric Unit: $0.00</div>
-            </div>
-
-            <div class="field" style="margin-bottom:18px;"><label>Description / Notes</label><textarea id="inv-form-notes" placeholder="Additional details..."></textarea></div>
-
-            <div style="display:flex; gap:10px; justify-content:flex-end;">
-              <button type="button" class="btn btn-ghost" onclick="closeInventoryModal()">Cancel</button>
-              <button type="submit" class="btn btn-primary">Save Item</button>
-            </div>
-          </form>
-        </div>
-      </div>
-
       <!-- PRINTABLE QR LABEL POPUP -->
       <div id="inv-label-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
         <div class="card" style="background:#fff; color:#000; width:450px; border-radius:12px; padding:24px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.5); text-align:center;">
@@ -200,7 +197,26 @@ window.__makerInit_inventory = function () {
 
   // Load from memory cache or fetch from Google Sheets
   loadInventory(false);
+  prepareInventoryForm(null);
+  populateInventoryCatFilter();
 };
+
+async function populateInventoryCatFilter() {
+  if (!window.OSOT_CATS) {
+    if (window.loadCategories) {
+      await window.loadCategories();
+    }
+  }
+  const cats = window.OSOT_CATS || {};
+  const filterSel = document.getElementById('inv-cat-filter');
+  if (filterSel) {
+    let html = '<option value="ALL">All Categories</option>';
+    Object.keys(cats).forEach(code => {
+      html += `<option value="${code}">${cats[code].label} (${code})</option>`;
+    });
+    filterSel.innerHTML = html;
+  }
+}
 
 /**
  * Generates an SVG QR Code representation for printable labels
@@ -425,26 +441,6 @@ function renderInventoryTable(items) {
     const capacity = Number(item.metricCapacity || 1);
     const unitCost = repCost / capacity;
 
-    // Cost calculations
-    const repCost = Number(item.cost || 0);
-    const capacity = Number(item.metricCapacity || 1);
-    const unitCost = repCost / capacity;
-
-    // Cost calculations
-    const repCost = Number(item.cost || 0);
-    const capacity = Number(item.metricCapacity || 1);
-    const unitCost = repCost / capacity;
-
-    // Cost calculations
-    const repCost = Number(item.cost || 0);
-    const capacity = Number(item.metricCapacity || 1);
-    const unitCost = repCost / capacity;
-
-    // Cost calculations
-    const repCost = Number(item.cost || 0);
-    const capacity = Number(item.metricCapacity || 1);
-    const unitCost = repCost / capacity;
-
     return `
       <tr>
         <td>
@@ -495,47 +491,49 @@ function filterInventory() {
 }
 
 /**
- * POPULATE SKU AND SUPPLIER DROPDOWNS & OPEN MODAL
+ * POPULATE SKU AND SUPPLIER DROPDOWNS & INITIALIZE FORM STATE
  */
-async function openInventoryModal(id = null) {
-  const modal = document.getElementById('inventory-modal');
-  if (!modal) return;
-
+async function prepareInventoryForm(id = null) {
   // Load SKUs
   let skus = [];
   try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
 
   const skuSelect = document.getElementById('inv-form-sku');
-  skuSelect.innerHTML = '<option value="">Select SKU...</option>';
-  skus.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.sku;
-    opt.textContent = `${s.sku} - ${s.name}`;
-    opt.dataset.name = s.name;
-    opt.dataset.brand = s.brand;
-    opt.dataset.cat = s.cat;
-    opt.dataset.subcat = s.subcat;
-    opt.dataset.cost = s.cost;
-    skuSelect.appendChild(opt);
-  });
+  if (skuSelect) {
+    skuSelect.innerHTML = '<option value="">Select SKU...</option>';
+    skus.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.sku;
+      opt.textContent = `${s.sku} - ${s.name}`;
+      opt.dataset.name = s.name;
+      opt.dataset.brand = s.brand;
+      opt.dataset.cat = s.cat;
+      opt.dataset.subcat = s.subcat;
+      opt.dataset.cost = s.cost;
+      skuSelect.appendChild(opt);
+    });
+  }
 
   // Load Suppliers
   let sups = [];
   try { sups = await window.makerAPI.readData('suppliers.json') || []; } catch(e){}
   const supSelect = document.getElementById('inv-form-supplier');
-  supSelect.innerHTML = '<option value="">Select Supplier...</option>';
-  sups.filter(s => s.status === 'Active').forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.name;
-    opt.textContent = s.name;
-    supSelect.appendChild(opt);
-  });
+  if (supSelect) {
+    supSelect.innerHTML = '<option value="">Select Supplier...</option>';
+    sups.filter(s => s.status === 'Active').forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.name;
+      supSelect.appendChild(opt);
+    });
+  }
 
-  // Reset form
+  // Reset form to Add state
   document.getElementById('inv-form').reset();
   document.getElementById('inv-form-id').value = '';
-  document.getElementById('inv-modal-title').textContent = 'Add Inventory Item';
+  document.getElementById('inv-form-title').textContent = 'Add Inventory Item';
   document.getElementById('inv-form-cost-per-unit-preview').textContent = 'Cost per Metric Unit: $0.00';
+  document.getElementById('inv-cancel-btn').style.display = 'none';
   onInventoryMetricChange();
 
   if (id) {
@@ -570,17 +568,29 @@ async function openInventoryModal(id = null) {
       document.getElementById('inv-form-capacity').value = item.metricCapacity || 1;
       document.getElementById('inv-form-notes').value = item.notes;
 
-      document.getElementById('inv-modal-title').textContent = 'Edit Inventory Item';
+      document.getElementById('inv-form-title').textContent = 'Edit Inventory Item';
+      document.getElementById('inv-cancel-btn').style.display = 'inline-flex';
       calcFormMetricCost();
     }
   }
 
-  modal.style.display = 'flex';
+  // Auto-focus the SKU Selector and scroll smoothly to top
+  if (skuSelect) {
+    skuSelect.focus();
+  }
+  const appContainer = document.getElementById('inventory-app-container');
+  if (appContainer) {
+    appContainer.scrollIntoView({ behavior: 'smooth' });
+  }
 }
 
-function closeInventoryModal() {
-  const modal = document.getElementById('inventory-modal');
-  if (modal) modal.style.display = 'none';
+function clearInventoryForm() {
+  document.getElementById('inv-form').reset();
+  document.getElementById('inv-form-id').value = '';
+  document.getElementById('inv-form-title').textContent = 'Add Inventory Item';
+  document.getElementById('inv-form-cost-per-unit-preview').textContent = 'Cost per Metric Unit: $0.00';
+  document.getElementById('inv-cancel-btn').style.display = 'none';
+  onInventoryMetricChange();
 }
 
 function onInventorySkuChange() {
@@ -710,12 +720,12 @@ async function saveInventoryItemForm(e) {
     await window.MAKER_CONFIG.saveToDatabase('Inventory', rowArray);
   }
 
-  closeInventoryModal();
+  clearInventoryForm();
   renderInventoryTable(window.__inventoryCache);
 }
 
 function editInventoryItem(id) {
-  openInventoryModal(id);
+  prepareInventoryForm(id);
 }
 
 /**
