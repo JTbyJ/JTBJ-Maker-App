@@ -78,6 +78,9 @@ G	Instagram_Handle	igHandle	''[cite: 6]
 H	Customer_Type	type	'Personal'[cite: 6]
 I	Notes	notes	''[cite: 6]
 J	Created_At	createdAt	YYYY-MM-DD[cite: 6]
+
+*Note on Address Validation / Autocomplete:* The Customer shipping/mailing address (Column E) is integrated with Google Places API Autocomplete. The Places Autocomplete script is loaded dynamically using the key defined in `window.MAKER_CONFIG.googleMapsApiKey`. The dropdown has custom dark-themed styling overrides (`.pac-container`) and handles `Enter` key behavior to prevent form submission during selection.
+
 B. Inventory Sheet Mapping[cite: 5]
 Column	Sheet Header	JavaScript Property	Default / Fallback
 A	Item_ID	id	Generated Hash
