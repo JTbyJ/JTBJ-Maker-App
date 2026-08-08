@@ -3,6 +3,9 @@
  * Path: modules/products.js
  */
 
+// Global products memory cache
+window.__productsCache = null;
+
 (function(){
   var FILE='products.json';
   var products=[];
@@ -12,7 +15,7 @@
 
   function g(id){return document.getElementById(id);}
 
-  window.__makerInit_products=function(){
+  window.__makerInit_products=async function(){
     var frame=g('module-frame');
     var p=g('panel-products');
     if(!p){
@@ -81,12 +84,9 @@
               </div>
               <div style="display:flex;gap:10px;margin-bottom:10px">
                 <div class="field" style="flex:1">
-                  <label>Category</label>
+                  <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Category</label><button type="button" class="btn btn-ghost btn-sm" data-goto="categories" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>
                   <select id="p-cat">
-                    <option value="Sublimation Tumblers">Sublimation Tumblers</option>
-                    <option value="3D Prints">3D Prints</option>
-                    <option value="Laser Crafts">Laser Crafts</option>
-                    <option value="Other Finishings">Other Finishings</option>
+                    <!-- Dynamic Category Options -->
                   </select>
                 </div>
                 <div class="field" style="flex:1">
@@ -187,12 +187,32 @@
       frame.appendChild(p);
       setupEvents();
     }
-    load();
+    await load();
   };
+
+  async function populateProductCats() {
+    if (!window.OSOT_CATS) {
+      if (window.loadCategories) {
+        await window.loadCategories();
+      }
+    }
+    const cats = window.OSOT_CATS || {};
+    const select = g('p-cat');
+    if (select) {
+      let html = '';
+      Object.keys(cats).forEach(code => {
+        html += `<option value="${cats[code].label}">${cats[code].label}</option>`;
+      });
+      select.innerHTML = html;
+    }
+  }
 
   function setupEvents(){
     g('prod-tab-list-btn').addEventListener('click',function(){switchTab('list');});
-    g('prod-tab-form-btn').addEventListener('click',function(){switchTab('form');});
+    g('prod-tab-form-btn').addEventListener('click',function(){
+      clearBuildForm();
+      switchTab('form');
+    });
 
     // Qty Required Dynamic Metric Label on Selected Item change
     g('p-bom-item').addEventListener('change', function() {
@@ -335,6 +355,7 @@
       };
       if(editId){var idx=products.findIndex(function(x){return x.id===editId;});if(idx>=0)products[idx]=obj;}
       else products.unshift(obj);
+      window.__productsCache = products;
       await sv();
       try {
         if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
@@ -371,7 +392,14 @@
   }
 
   async function loadInventory(){
-    try{invList=await window.makerAPI.readData('inventory.json')||[];}catch(err){invList=[];}
+    try{
+      if (window.__inventoryCache && window.__inventoryCache.length > 0) {
+        invList = window.__inventoryCache;
+      } else {
+        invList=await window.makerAPI.readData('inventory.json')||[];
+        window.__inventoryCache = invList;
+      }
+    }catch(err){invList=[];}
     var sel=g('p-bom-item');if(!sel)return;
     sel.innerHTML='<option value="">Select Raw Item...</option>';
     invList.forEach(function(i){
@@ -381,6 +409,15 @@
 
   async function load(){
     await loadInventory();
+    await populateProductCats();
+
+    // Use in-memory cache if available
+    if (window.__productsCache && Array.isArray(window.__productsCache) && window.__productsCache.length > 0) {
+      products = window.__productsCache;
+      renderList();
+      return;
+    }
+
     try {
       let fetchFunc = null;
       if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
@@ -389,7 +426,8 @@
       if (fetchFunc) {
         const remoteData = await fetchFunc('Products');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
+          // Robust header row check including SKU / ID column variations
+          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id' || remoteData[0][0] === 'SKU' || remoteData[0][0] === 'sku')) ? 1 : 0;
           products = remoteData.slice(startIndex).map(row => {
             let platforms = [];
             try { platforms = JSON.parse(row[5] || '[]'); } catch(e) {
@@ -419,6 +457,7 @@
             };
           }).filter(x => x.id && x.status !== 'DELETED');
           
+          window.__productsCache = products;
           await window.makerAPI.writeData(FILE, products);
           renderList();
           return;
@@ -428,7 +467,10 @@
       console.error('[Products] Failed loading remote products:', err);
     }
 
-    try{products=await window.makerAPI.readData(FILE)||[];}catch(e){products=[];}
+    try{
+      products=await window.makerAPI.readData(FILE)||[];
+      window.__productsCache = products;
+    }catch(e){products=[];}
     renderList();
   }
   async function sv(){
@@ -487,6 +529,7 @@
         if(!confirm('Delete this product?'))return;
         const idToDelete = b.dataset.id;
         products=products.filter(function(x){return x.id!==idToDelete;});
+        window.__productsCache = products;
         await sv();
         try {
           if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {

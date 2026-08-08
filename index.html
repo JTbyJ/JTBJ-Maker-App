@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://maps.googleapis.com https://places.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://maps.googleapis.com; img-src 'self' data: https://maps.gstatic.com https://maps.googleapis.com; font-src 'self' https://fonts.gstatic.com;" />
   <title>Just Jane Maker Lab</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -111,6 +111,7 @@
       <div class="nav-item" data-panel="orders"><span class="nav-icon">🧾</span><span class="nav-label">Orders</span></div>
       <div class="nav-item" data-panel="inventory"><span class="nav-icon">▣</span><span class="nav-label">Inventory</span></div>
       <div class="nav-item" data-panel="sku"><span class="nav-icon">◆</span><span class="nav-label">SKU Builder</span></div>
+      <div class="nav-item" data-panel="categories"><span class="nav-icon">📁</span><span class="nav-label">Category Manager</span></div>
       <div class="nav-item" data-panel="projects"><span class="nav-icon">▤</span><span class="nav-label">Project Log</span></div>
       <div class="nav-item" data-panel="suppliers"><span class="nav-icon">◎</span><span class="nav-label">Suppliers</span></div>
       <div class="nav-item" data-panel="assets"><span class="nav-icon">&#9632;</span><span class="nav-label">Assets &amp; Accounts</span></div>
@@ -157,6 +158,7 @@
 <script src="modules/products.js"></script>
 <script src="modules/customers.js"></script>
 <script src="modules/orders.js"></script>
+<script src="modules/categories.js"></script>
 
 <script>
 (async()=>{
@@ -166,7 +168,7 @@
   tick();setInterval(tick,30000);
   const navItems=document.querySelectorAll('.nav-item[data-panel]');
   const titleEl=document.getElementById('topbar-title');
-  const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
+  const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',categories:'Category Manager',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
 'customers': 'Customers',
 'orders': 'Orders'};
   function activatePanel(id){
