@@ -62,7 +62,8 @@ window.MAKER_CONFIG = {
       'suppliers.json',
       'products.json',
       'orders.json',
-      'sku.json'
+      'sku.json',
+      'categories.json'
     ];
 
     function filenameToTabName(filename) {
