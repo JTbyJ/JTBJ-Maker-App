@@ -129,6 +129,10 @@ window.__customerCache = null;
         }
         return;
       }
+    if (!addressInput) return;
+
+    loadGoogleMapsScript().then(() => {
+      if (!window.google || !window.google.maps || !window.google.maps.places) return;
 
       const autocomplete = new window.google.maps.places.Autocomplete(addressInput, {
         types: ['address'],
