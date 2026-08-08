@@ -111,6 +111,7 @@
       <div class="nav-item" data-panel="orders"><span class="nav-icon">🧾</span><span class="nav-label">Orders</span></div>
       <div class="nav-item" data-panel="inventory"><span class="nav-icon">▣</span><span class="nav-label">Inventory</span></div>
       <div class="nav-item" data-panel="sku"><span class="nav-icon">◆</span><span class="nav-label">SKU Builder</span></div>
+      <div class="nav-item" data-panel="categories"><span class="nav-icon">📁</span><span class="nav-label">Category Manager</span></div>
       <div class="nav-item" data-panel="projects"><span class="nav-icon">▤</span><span class="nav-label">Project Log</span></div>
       <div class="nav-item" data-panel="suppliers"><span class="nav-icon">◎</span><span class="nav-label">Suppliers</span></div>
       <div class="nav-item" data-panel="assets"><span class="nav-icon">&#9632;</span><span class="nav-label">Assets &amp; Accounts</span></div>
@@ -157,6 +158,7 @@
 <script src="modules/products.js"></script>
 <script src="modules/customers.js"></script>
 <script src="modules/orders.js"></script>
+<script src="modules/categories.js"></script>
 
 <script>
 (async()=>{
@@ -166,7 +168,7 @@
   tick();setInterval(tick,30000);
   const navItems=document.querySelectorAll('.nav-item[data-panel]');
   const titleEl=document.getElementById('topbar-title');
-  const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
+  const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',categories:'Category Manager',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
 'customers': 'Customers',
 'orders': 'Orders'};
   function activatePanel(id){
