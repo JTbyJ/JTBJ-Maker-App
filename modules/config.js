@@ -7,6 +7,9 @@ window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
   scriptUrl: 'https://script.google.com/macros/s/AKfycbxUwtz-AkaMkaE8uXjIc5q5vyUuM8DpnGUBJ65pDOxCiv3rLWvWCPAj_Hcp3znTwC43bw/exec',
 
+  // Google Maps API Key for Address Autocomplete
+  googleMapsApiKey: 'AIzaSyCLr13nWg2vD_PnZpJDtJA7v-hil_VUEBA',
+
   /**
    * Save a single row of data to a specific tab in your Google Sheet
    */

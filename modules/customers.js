@@ -61,10 +61,81 @@ window.__customerCache = null;
     }
   }
 
+  // Cache to track if the Google Maps autocomplete script has been loaded
+  let mapsScriptPromise = null;
+
+  function loadGoogleMapsScript() {
+    if (mapsScriptPromise) return mapsScriptPromise;
+
+    mapsScriptPromise = new Promise((resolve, reject) => {
+      if (window.google && window.google.maps && window.google.maps.places) {
+        resolve();
+        return;
+      }
+
+      const apiKey = window.MAKER_CONFIG && window.MAKER_CONFIG.googleMapsApiKey;
+      if (!apiKey) {
+        console.warn('Google Maps API key not found in MAKER_CONFIG');
+        reject(new Error('API key missing'));
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=__googleMapsInitCallback`;
+      script.async = true;
+      script.defer = true;
+
+      window.__googleMapsInitCallback = function() {
+        resolve();
+      };
+
+      script.onerror = function(err) {
+        console.error('Failed to load Google Maps script', err);
+        reject(err);
+      };
+
+      document.head.appendChild(script);
+    });
+
+    return mapsScriptPromise;
+  }
+
+  function initAutocomplete() {
+    const addressInput = document.getElementById('cust-address');
+    if (!addressInput) return;
+
+    loadGoogleMapsScript().then(() => {
+      if (!window.google || !window.google.maps || !window.google.maps.places) return;
+
+      const autocomplete = new window.google.maps.places.Autocomplete(addressInput, {
+        types: ['address'],
+        fields: ['formatted_address']
+      });
+
+      // Prevent submit on pressing 'Enter' inside the autocomplete input field
+      addressInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          // Check if Google Autocomplete is currently showing dropdown (optional standard protection)
+          e.preventDefault();
+        }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place && place.formatted_address) {
+          addressInput.value = place.formatted_address;
+        }
+      });
+    }).catch(err => {
+      console.warn('Could not initialize address autocomplete:', err);
+    });
+  }
+
   window.__makerInit_customers = async function() {
     buildCustomerPageLayout();
     await loadCustomerData(false);
     attachCustomerEventListeners();
+    initAutocomplete();
   };
 
   function buildCustomerPageLayout() {
@@ -101,6 +172,37 @@ window.__customerCache = null;
         .badge-wholesale { background: #8b5cf6; color: #fff; }
         .badge-repeat { background: #10b981; color: #fff; }
         .badge-personal { background: #4b5563; color: #fff; }
+
+        /* Dark mode styling for Google Autocomplete search results dropdown */
+        .pac-container {
+          background-color: var(--card, #1f2b47) !important;
+          border: 1px solid var(--border, rgba(255,255,255,0.07)) !important;
+          border-radius: 8px !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,.5) !important;
+          font-family: inherit !important;
+          z-index: 999999 !important; /* Ensure it floats above all other overlays */
+          margin-top: 4px !important;
+        }
+        .pac-item {
+          border-top: 1px solid rgba(255,255,255,0.05) !important;
+          padding: 8px 12px !important;
+          color: var(--text, #e8eaf6) !important;
+          cursor: pointer !important;
+          transition: background 0.15s ease !important;
+        }
+        .pac-item:hover, .pac-item-selected {
+          background-color: rgba(224,64,251,0.12) !important;
+        }
+        .pac-item-query {
+          color: #fff !important;
+          font-size: 13px !important;
+        }
+        .pac-matched {
+          color: var(--accent, #e040fb) !important;
+        }
+        .pac-icon {
+          filter: invert(1) !important; /* Invert Google pin icons to fit dark mode better */
+        }
       </style>
 
       <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
