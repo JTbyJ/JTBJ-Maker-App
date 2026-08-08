@@ -9,6 +9,7 @@ window.__customerCache = null;
 
 (function() {
   let currentEditId = null;
+  let placeAutocomplete = null;
 
   /**
    * Phone Number Formatter
@@ -84,7 +85,7 @@ window.__customerCache = null;
     if (mapsScriptPromise) return mapsScriptPromise;
 
     mapsScriptPromise = new Promise((resolve, reject) => {
-      if (window.google && window.google.maps && window.google.maps.places) {
+      if (window.google && window.google.maps && window.google.maps.importLibrary) {
         resolve();
         return;
       }
@@ -97,7 +98,8 @@ window.__customerCache = null;
       }
 
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=__googleMapsInitCallback`;
+      // Bootstrap Loader script is standard for Places API (New)
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&callback=__googleMapsInitCallback`;
       script.async = true;
       script.defer = true;
 
@@ -118,37 +120,72 @@ window.__customerCache = null;
 
   function initAutocomplete() {
     const addressInput = document.getElementById('cust-address');
+    const autocompleteContainer = document.getElementById('cust-address-autocomplete-container');
     const errorEl = document.getElementById('cust-address-err');
-    if (!addressInput) return;
+    if (!addressInput || !autocompleteContainer) return;
 
-    loadGoogleMapsScript().then(() => {
-      if (!window.google || !window.google.maps || !window.google.maps.places) {
+    loadGoogleMapsScript().then(async () => {
+      try {
+        const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
+        if (!PlaceAutocompleteElement) {
+          if (errorEl) {
+            errorEl.textContent = '⚠️ Google Maps loaded, but PlaceAutocompleteElement library is missing.';
+            errorEl.style.display = 'block';
+          }
+          // Restore fallback standard text input
+          addressInput.style.display = 'block';
+          return;
+        }
+
+        // Hide original input and insert PlaceAutocompleteElement instead
+        addressInput.style.display = 'none';
+        autocompleteContainer.innerHTML = '';
+
+        placeAutocomplete = new PlaceAutocompleteElement({
+          requestedTypes: ['address']
+        });
+
+        // Safe styling using custom element standard CSS variables/properties
+        placeAutocomplete.style.setProperty('background-color', '#1a202c');
+        placeAutocomplete.style.setProperty('color', '#ffffff');
+        placeAutocomplete.style.setProperty('border', '1px solid #4a5568');
+        placeAutocomplete.style.setProperty('border-radius', '8px');
+        placeAutocomplete.style.setProperty('font-size', '13px');
+        placeAutocomplete.style.setProperty('font-family', 'inherit');
+        placeAutocomplete.style.setProperty('height', '38px');
+        placeAutocomplete.style.setProperty('box-sizing', 'border-box');
+        placeAutocomplete.style.setProperty('width', '100%');
+        placeAutocomplete.style.setProperty('display', 'block');
+
+        autocompleteContainer.appendChild(placeAutocomplete);
+
+        // Keep original input updated on select
+        placeAutocomplete.addEventListener('gmp-select', async ({ placePrediction }) => {
+          if (!placePrediction) return;
+          const place = placePrediction.toPlace();
+          await place.fetchFields({ fields: ['formattedAddress'] });
+          if (place && place.formattedAddress) {
+            addressInput.value = place.formattedAddress;
+          }
+        });
+
+        // Prevent submit on pressing 'Enter' inside the autocomplete input field
+        placeAutocomplete.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+          }
+        });
+
+      } catch (innerErr) {
+        console.error('Failed importing places library:', innerErr);
         if (errorEl) {
-          errorEl.textContent = '⚠️ Google Maps loaded, but Places library is missing.';
+          errorEl.textContent = '⚠️ Failed to initialize PlaceAutocompleteElement. Please ensure Places API (New) is enabled.';
           errorEl.style.display = 'block';
         }
-        return;
+        // Restore fallback standard text input
+        addressInput.style.display = 'block';
+        placeAutocomplete = null;
       }
-
-      const autocomplete = new window.google.maps.places.Autocomplete(addressInput, {
-        types: ['address'],
-        fields: ['formatted_address']
-      });
-
-      // Prevent submit on pressing 'Enter' inside the autocomplete input field
-      addressInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          // Check if Google Autocomplete is currently showing dropdown (optional standard protection)
-          e.preventDefault();
-        }
-      });
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace();
-        if (place && place.formatted_address) {
-          addressInput.value = place.formatted_address;
-        }
-      });
     }).catch(err => {
       console.warn('Could not initialize address autocomplete:', err);
       // Reset the promise cache so it can try reloading again on next visit
@@ -157,6 +194,9 @@ window.__customerCache = null;
         errorEl.textContent = '⚠️ Could not load Google Maps API. Check your internet connection or API Key.';
         errorEl.style.display = 'block';
       }
+      // Restore fallback standard text input
+      addressInput.style.display = 'block';
+      placeAutocomplete = null;
     });
   }
 
@@ -274,7 +314,9 @@ window.__customerCache = null;
 
             <div class="field" style="margin-bottom: 10px;">
               <label for="cust-address">SHIPPING / MAILING ADDRESS</label>
-              <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
+              <div id="cust-address-autocomplete-container">
+                <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
+              </div>
               <div id="cust-address-err" style="color: #ff5252; font-size: 11px; margin-top: 4px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,82,82,0.2);"></div>
             </div>
 
@@ -529,6 +571,14 @@ window.__customerCache = null;
       if (formTitle) formTitle.textContent = 'Add New Customer';
       if (submitBtn) submitBtn.textContent = 'Save Customer';
       if (cancelEditBtn) cancelEditBtn.style.display = 'none';
+
+      // Clear custom PlaceAutocompleteElement input
+      if (placeAutocomplete && placeAutocomplete.shadowRoot) {
+        const shadowInput = placeAutocomplete.shadowRoot.querySelector('input');
+        if (shadowInput) {
+          shadowInput.value = '';
+        }
+      }
     }
 
     if (cancelEditBtn) {
@@ -764,6 +814,14 @@ window.__customerCache = null;
     document.getElementById('cust-ig').value = cust.igHandle || '';
     document.getElementById('cust-finish').value = cust.finishPref || '';
     document.getElementById('cust-notes').value = cust.notes || '';
+
+    // Set custom PlaceAutocompleteElement input
+    if (placeAutocomplete && placeAutocomplete.shadowRoot) {
+      const shadowInput = placeAutocomplete.shadowRoot.querySelector('input');
+      if (shadowInput) {
+        shadowInput.value = cust.address || '';
+      }
+    }
 
     const formTitle = document.getElementById('form-title');
     const submitBtn = document.getElementById('btn-submit-cust');
