@@ -9,6 +9,7 @@ window.__customerCache = null;
 
 (function() {
   let currentEditId = null;
+  let placeAutocomplete = null;
 
   /**
    * Phone Number Formatter
@@ -61,10 +62,147 @@ window.__customerCache = null;
     }
   }
 
+  // Cache to track if the Google Maps autocomplete script has been loaded
+  let mapsScriptPromise = null;
+
+  // Global callback for Google Maps authentication failures (e.g. referer, API activation, billing issues)
+  window.gm_authFailure = function() {
+    console.error('Google Maps API Authentication Failed.');
+    const errorEl = document.getElementById('cust-address-err');
+    if (errorEl) {
+      errorEl.innerHTML = `⚠️ <strong>Google Maps Error</strong>: Authentication failed.<br>
+        <span style="font-size: 11px; color: #a0aec0; display: block; margin-top: 4px; line-height: 1.3;">
+          Common causes:<br>
+          1. <strong>HTTP Referrer Restriction</strong>: If your API Key is restricted to specific websites, it will block local Electron apps (which run on <code>file://</code>). Go to Google Cloud Console and set Key Restrictions to "None" or "IP Addresses" (for local testing).<br>
+          2. <strong>Billing</strong>: Ensure your Google Cloud Billing Account is active.<br>
+          3. <strong>APIs Enabled</strong>: Ensure both <strong>"Maps JavaScript API"</strong> and <strong>"Places API"</strong> are enabled in your Google Cloud Console.
+        </span>`;
+      errorEl.style.display = 'block';
+    }
+  };
+
+  function loadGoogleMapsScript() {
+    if (mapsScriptPromise) return mapsScriptPromise;
+
+    mapsScriptPromise = new Promise((resolve, reject) => {
+      if (window.google && window.google.maps && window.google.maps.importLibrary) {
+        resolve();
+        return;
+      }
+
+      const apiKey = window.MAKER_CONFIG && window.MAKER_CONFIG.googleMapsApiKey;
+      if (!apiKey) {
+        console.warn('Google Maps API key not found in MAKER_CONFIG');
+        reject(new Error('API key missing'));
+        return;
+      }
+
+      const script = document.createElement('script');
+      // Bootstrap Loader script is standard for Places API (New)
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&callback=__googleMapsInitCallback`;
+      script.async = true;
+      script.defer = true;
+
+      window.__googleMapsInitCallback = function() {
+        resolve();
+      };
+
+      script.onerror = function(err) {
+        console.error('Failed to load Google Maps script', err);
+        reject(err);
+      };
+
+      document.head.appendChild(script);
+    });
+
+    return mapsScriptPromise;
+  }
+
+  function initAutocomplete() {
+    const addressInput = document.getElementById('cust-address');
+    const autocompleteContainer = document.getElementById('cust-address-autocomplete-container');
+    const errorEl = document.getElementById('cust-address-err');
+    if (!addressInput || !autocompleteContainer) return;
+
+    loadGoogleMapsScript().then(async () => {
+      try {
+        const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
+        if (!PlaceAutocompleteElement) {
+          if (errorEl) {
+            errorEl.textContent = '⚠️ Google Maps loaded, but PlaceAutocompleteElement library is missing.';
+            errorEl.style.display = 'block';
+          }
+          // Restore fallback standard text input
+          addressInput.style.display = 'block';
+          return;
+        }
+
+        // Hide original input and insert PlaceAutocompleteElement instead
+        addressInput.style.display = 'none';
+        autocompleteContainer.style.display = 'block';
+        autocompleteContainer.innerHTML = '';
+
+        placeAutocomplete = new PlaceAutocompleteElement();
+        autocompleteContainer.appendChild(placeAutocomplete);
+
+        // Keep original input updated on select
+        placeAutocomplete.addEventListener('gmp-select', async ({ placePrediction }) => {
+          if (!placePrediction) return;
+          const place = placePrediction.toPlace();
+          await place.fetchFields({ fields: ['formattedAddress'] });
+          if (place && place.formattedAddress) {
+            addressInput.value = place.formattedAddress;
+          }
+        });
+
+        // Sync manual typing to addressInput to prevent data loss
+        placeAutocomplete.addEventListener('input', () => {
+          if (placeAutocomplete && placeAutocomplete.shadowRoot) {
+            const shadowInput = placeAutocomplete.shadowRoot.querySelector('input');
+            if (shadowInput) {
+              addressInput.value = shadowInput.value;
+            }
+          }
+        });
+
+        // Prevent submit on pressing 'Enter' inside the autocomplete input field
+        placeAutocomplete.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+          }
+        });
+
+      } catch (innerErr) {
+        console.error('Failed importing places library:', innerErr);
+        if (errorEl) {
+          errorEl.textContent = '⚠️ Failed to initialize PlaceAutocompleteElement. Please ensure Places API (New) is enabled.';
+          errorEl.style.display = 'block';
+        }
+        // Restore fallback standard text input
+        addressInput.style.display = 'block';
+        autocompleteContainer.style.display = 'none';
+        placeAutocomplete = null;
+      }
+    }).catch(err => {
+      console.warn('Could not initialize address autocomplete:', err);
+      // Reset the promise cache so it can try reloading again on next visit
+      mapsScriptPromise = null;
+      if (errorEl) {
+        errorEl.textContent = '⚠️ Could not load Google Maps API. Check your internet connection or API Key.';
+        errorEl.style.display = 'block';
+      }
+      // Restore fallback standard text input
+      addressInput.style.display = 'block';
+      autocompleteContainer.style.display = 'none';
+      placeAutocomplete = null;
+    });
+  }
+
   window.__makerInit_customers = async function() {
     buildCustomerPageLayout();
     await loadCustomerData(false);
     attachCustomerEventListeners();
+    initAutocomplete();
   };
 
   function buildCustomerPageLayout() {
@@ -101,6 +239,92 @@ window.__customerCache = null;
         .badge-wholesale { background: #8b5cf6; color: #fff; }
         .badge-repeat { background: #10b981; color: #fff; }
         .badge-personal { background: #4b5563; color: #fff; }
+
+        /* Dark mode styling for Google Autocomplete search results dropdown */
+        .pac-container {
+          background-color: var(--card, #1f2b47) !important;
+          border: 1px solid var(--border, rgba(255,255,255,0.07)) !important;
+          border-radius: 8px !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,.5) !important;
+          font-family: inherit !important;
+          z-index: 999999 !important; /* Ensure it floats above all other overlays */
+          margin-top: 4px !important;
+        }
+        .pac-item {
+          border-top: 1px solid rgba(255,255,255,0.05) !important;
+          padding: 8px 12px !important;
+          color: var(--text, #e8eaf6) !important;
+          cursor: pointer !important;
+          transition: background 0.15s ease !important;
+        }
+        .pac-item:hover, .pac-item-selected {
+          background-color: rgba(224,64,251,0.12) !important;
+        }
+        .pac-item-query {
+          color: #fff !important;
+          font-size: 13px !important;
+        }
+        .pac-matched {
+          color: var(--accent, #e040fb) !important;
+        }
+        .pac-icon {
+          filter: invert(1) !important; /* Invert Google pin icons to fit dark mode better */
+        }
+
+        /* Style for modern Google Place Autocomplete component */
+        gmp-place-autocomplete {
+          color-scheme: dark !important;
+          width: 100% !important;
+          display: block !important;
+          background: transparent !important;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
+        gmp-place-autocomplete::part(input) {
+          background-color: var(--surface, #1a1a2e) !important;
+          color: var(--text, #e8eaf6) !important;
+          border: 1px solid var(--border, rgba(255,255,255,0.07)) !important;
+          border-radius: 8px !important;
+          font-size: 13px !important;
+          font-family: inherit !important;
+          height: 38px !important;
+          box-sizing: border-box !important;
+          width: 100% !important;
+          padding: 8px 12px !important;
+          outline: none !important;
+          transition: border-color var(--trans, 0.2s ease) !important;
+          color-scheme: dark !important;
+        }
+
+        gmp-place-autocomplete::part(input):focus {
+          border-color: var(--accent, #e040fb) !important;
+        }
+
+        gmp-place-autocomplete::part(prediction-list) {
+          background-color: var(--card, #1f2b47) !important;
+          border: 1px solid var(--border, rgba(255,255,255,0.07)) !important;
+          border-radius: 8px !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,.5) !important;
+          font-family: inherit !important;
+          color: var(--text, #e8eaf6) !important;
+          z-index: 999999 !important;
+          margin-top: 4px !important;
+          color-scheme: dark !important;
+        }
+
+        gmp-place-autocomplete::part(prediction) {
+          color: var(--text, #e8eaf6) !important;
+          background-color: transparent !important;
+          transition: background 0.15s ease !important;
+          cursor: pointer !important;
+        }
+
+        gmp-place-autocomplete::part(prediction):hover,
+        gmp-place-autocomplete::part(prediction):focus {
+          background-color: rgba(224, 64, 251, 0.12) !important;
+        }
       </style>
 
       <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
@@ -144,6 +368,8 @@ window.__customerCache = null;
             <div class="field" style="margin-bottom: 10px;">
               <label for="cust-address">SHIPPING / MAILING ADDRESS</label>
               <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
+              <div id="cust-address-autocomplete-container"></div>
+              <div id="cust-address-err" style="color: #ff5252; font-size: 11px; margin-top: 4px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,82,82,0.2);"></div>
             </div>
 
             <div style="display: flex; gap: 10px; margin-bottom: 10px;">
@@ -397,6 +623,14 @@ window.__customerCache = null;
       if (formTitle) formTitle.textContent = 'Add New Customer';
       if (submitBtn) submitBtn.textContent = 'Save Customer';
       if (cancelEditBtn) cancelEditBtn.style.display = 'none';
+
+      // Clear custom PlaceAutocompleteElement input
+      if (placeAutocomplete && placeAutocomplete.shadowRoot) {
+        const shadowInput = placeAutocomplete.shadowRoot.querySelector('input');
+        if (shadowInput) {
+          shadowInput.value = '';
+        }
+      }
     }
 
     if (cancelEditBtn) {
@@ -632,6 +866,14 @@ window.__customerCache = null;
     document.getElementById('cust-ig').value = cust.igHandle || '';
     document.getElementById('cust-finish').value = cust.finishPref || '';
     document.getElementById('cust-notes').value = cust.notes || '';
+
+    // Set custom PlaceAutocompleteElement input
+    if (placeAutocomplete && placeAutocomplete.shadowRoot) {
+      const shadowInput = placeAutocomplete.shadowRoot.querySelector('input');
+      if (shadowInput) {
+        shadowInput.value = cust.address || '';
+      }
+    }
 
     const formTitle = document.getElementById('form-title');
     const submitBtn = document.getElementById('btn-submit-cust');
