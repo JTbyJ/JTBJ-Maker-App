@@ -141,9 +141,7 @@ window.__customerCache = null;
         addressInput.style.display = 'none';
         autocompleteContainer.innerHTML = '';
 
-        placeAutocomplete = new PlaceAutocompleteElement({
-          includedPrimaryTypes: ['address']
-        });
+        placeAutocomplete = new PlaceAutocompleteElement();
 
         // Safe styling using custom element standard CSS variables/properties
         placeAutocomplete.style.setProperty('background-color', '#1a202c');
@@ -314,8 +312,9 @@ window.__customerCache = null;
 
             <div class="field" style="margin-bottom: 10px;">
               <label for="cust-address">SHIPPING / MAILING ADDRESS</label>
-              <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
-              <div id="cust-address-autocomplete-container"></div>
+              <div id="cust-address-autocomplete-container">
+                <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
+              </div>
               <div id="cust-address-err" style="color: #ff5252; font-size: 11px; margin-top: 4px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,82,82,0.2);"></div>
             </div>
 
