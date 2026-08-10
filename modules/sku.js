@@ -76,6 +76,7 @@
       .replace(/"/g, '&quot;');
   }
 
+
   /* ── PANEL HTML ── */
   panel.innerHTML=
     '<style>' +
@@ -154,6 +155,7 @@
 
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Description / Notes</label><input id="sku-notes" placeholder="e.g. 11oz sublimation mug, white poly-coated"></div>'+
+        '<div class="field" style="flex:2"><label>Photo URL / Image Link</label><input id="sku-photo" placeholder="e.g. https://imgur.com/example.png"></div>'+
       '</div>'+
 
       '<div style="display:flex;gap:8px;margin-top:10px">'+
@@ -179,8 +181,9 @@
       '</select>'+
     '</div>'+
     '<div class="table-wrap"><table><thead><tr>'+
-      '<th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand/Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
-    '</tr></thead><tbody id="sku-tbody"></tbody></table></div>';
+      '<th>Photo</th><th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand/Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
+    '</tr></thead><tbody id="sku-tbody"></tbody></table></div>' +
+    '';
 
   frame.appendChild(panel);
 
@@ -309,23 +312,48 @@
       if (fetchFunc) {
         const remoteData = await fetchFunc('Sku');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
-          items = remoteData.slice(startIndex).map(row => ({
-            id: row[0] || '',
-            sku: row[1] || '',
-            name: row[2] || '',
-            cat: row[3] || firstCat,
-            subcat: row[4] || '',
-            brand: row[5] || '',
-            cost: Number(row[6]) || 0,
-            price: Number(row[7]) || 0,
-            cogs: Number(row[8]) || 0,
-            retail: Number(row[9]) || 0,
-            status: row[10] || 'Active',
-            notes: row[11] || '',
-            classification: row[12] || 'Raw Component / Material (BOM Input)'
-          })).filter(x => x.sku && x.status !== 'DELETED');
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'sku_id' || h.includes('id'));
+          const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
+          const nameIdx = header.findIndex(h => h === 'name' || h === 'product name' || h.includes('name'));
+          const catIdx = header.findIndex(h => h === 'cat' || h === 'category' || h.includes('cat'));
+          const subcatIdx = header.findIndex(h => h === 'subcat' || h === 'subcategory' || h.includes('subcat'));
+          const brandIdx = header.findIndex(h => h === 'brand' || h === 'brand/supplier' || h.includes('brand') || h.includes('supplier'));
+          const costIdx = header.findIndex(h => h === 'cost' || h.includes('cost'));
+          const priceIdx = header.findIndex(h => h === 'price' || h.includes('price'));
+          const cogsIdx = header.findIndex(h => h === 'cogs' || h.includes('cogs'));
+          const retailIdx = header.findIndex(h => h === 'retail' || h === 'retail price' || h.includes('retail'));
+          const statusIdx = header.findIndex(h => h === 'status' || h.includes('status'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('desc'));
+          const classIdx = header.findIndex(h => h === 'classification' || h.includes('class'));
+          const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
+          const parsedSkus = [];
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+
+            parsedSkus.push({
+              id: idVal,
+              sku: skuIdx !== -1 ? r[skuIdx] : '',
+              name: nameIdx !== -1 ? r[nameIdx] : '',
+              cat: catIdx !== -1 ? r[catIdx] : firstCat,
+              subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
+              brand: brandIdx !== -1 ? r[brandIdx] : '',
+              cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
+              price: priceIdx !== -1 ? (Number(r[priceIdx]) || 0) : 0,
+              cogs: cogsIdx !== -1 ? (Number(r[cogsIdx]) || 0) : 0,
+              retail: retailIdx !== -1 ? (Number(r[retailIdx]) || 0) : 0,
+              status: statusIdx !== -1 ? r[statusIdx] : 'Active',
+              notes: notesIdx !== -1 ? r[notesIdx] : '',
+              classification: classIdx !== -1 ? r[classIdx] : 'Raw Component / Material (BOM Input)',
+              photo: photoIdx !== -1 ? r[photoIdx] : ''
+            });
+          }
+
+          items = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');
           await sv();
         } else {
           items=await window.makerAPI.readData(FILE)||[];
@@ -378,7 +406,15 @@
       var isRaw = (i.classification || '').includes('Raw');
       var classBadge = isRaw ? '<span class="badge badge-accent">🛠️ Raw</span>' : '<span class="badge badge-teal">🛍️ Etsy</span>';
 
+      var photoCell = '';
+      if (i.photo) {
+        photoCell = '<img src="' + escapeHtml(i.photo) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(\'' + escapeHtml(i.photo) + '\')">';
+      } else {
+        photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
+      }
+
       return '<tr>'+
+        '<td>' + photoCell + '</td>' +
         '<td style="font-family:monospace;font-weight:700;color:var(--accent)">'+i.sku+'</td>'+
         '<td style="font-weight:600">'+escapeHtml(i.name)+'</td>'+
         '<td>'+classBadge+'</td>'+
@@ -415,6 +451,7 @@
         $('sku-retail').value=i.retail||'';
         $('sku-status').value=i.status||'Active';
         $('sku-notes').value=i.notes||'';
+        $('sku-photo').value=i.photo||'';
         buildPreview();calcMargin();
         $('sku-form-title').textContent='Edit SKU';
         $('sku-cancel').style.display='inline-flex';
@@ -456,7 +493,8 @@
       cogs:Number($('sku-cogs').value)||0,
       retail:Number($('sku-retail').value)||0,
       status:$('sku-status').value,
-      notes:$('sku-notes').value.trim()
+      notes:$('sku-notes').value.trim(),
+      photo:$('sku-photo').value.trim()
     };
     if(editId){
       var idx=items.findIndex(function(x){return x.id===editId;});
@@ -470,7 +508,7 @@
       await window.MAKER_CONFIG.saveToDatabase('Sku', [
         obj.id, obj.sku, obj.name, obj.cat, obj.subcat,
         obj.brand, obj.cost, obj.price, obj.cogs, obj.retail,
-        obj.status, obj.notes, obj.classification
+        obj.status, obj.notes, obj.classification, obj.photo
       ]);
     }
   });
@@ -488,6 +526,7 @@
     $('sku-cogs').value='';
     $('sku-retail').value='';
     $('sku-notes').value='';
+    $('sku-photo').value='';
     $('sku-status').value='Active';
     var defaultCat = Object.keys(OSOT_CATS)[0] || 'FIL';
     var defaultSub = Object.keys((OSOT_CATS[defaultCat] || {subs:{}}).subs)[0] || '';
