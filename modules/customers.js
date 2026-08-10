@@ -139,22 +139,10 @@ window.__customerCache = null;
 
         // Hide original input and insert PlaceAutocompleteElement instead
         addressInput.style.display = 'none';
+        autocompleteContainer.style.display = 'block';
         autocompleteContainer.innerHTML = '';
 
         placeAutocomplete = new PlaceAutocompleteElement();
-
-        // Safe styling using custom element standard CSS variables/properties
-        placeAutocomplete.style.setProperty('background-color', '#1a202c');
-        placeAutocomplete.style.setProperty('color', '#ffffff');
-        placeAutocomplete.style.setProperty('border', '1px solid #4a5568');
-        placeAutocomplete.style.setProperty('border-radius', '8px');
-        placeAutocomplete.style.setProperty('font-size', '13px');
-        placeAutocomplete.style.setProperty('font-family', 'inherit');
-        placeAutocomplete.style.setProperty('height', '38px');
-        placeAutocomplete.style.setProperty('box-sizing', 'border-box');
-        placeAutocomplete.style.setProperty('width', '100%');
-        placeAutocomplete.style.setProperty('display', 'block');
-
         autocompleteContainer.appendChild(placeAutocomplete);
 
         // Keep original input updated on select
@@ -164,6 +152,16 @@ window.__customerCache = null;
           await place.fetchFields({ fields: ['formattedAddress'] });
           if (place && place.formattedAddress) {
             addressInput.value = place.formattedAddress;
+          }
+        });
+
+        // Sync manual typing to addressInput to prevent data loss
+        placeAutocomplete.addEventListener('input', () => {
+          if (placeAutocomplete && placeAutocomplete.shadowRoot) {
+            const shadowInput = placeAutocomplete.shadowRoot.querySelector('input');
+            if (shadowInput) {
+              addressInput.value = shadowInput.value;
+            }
           }
         });
 
@@ -182,6 +180,7 @@ window.__customerCache = null;
         }
         // Restore fallback standard text input
         addressInput.style.display = 'block';
+        autocompleteContainer.style.display = 'none';
         placeAutocomplete = null;
       }
     }).catch(err => {
@@ -194,6 +193,7 @@ window.__customerCache = null;
       }
       // Restore fallback standard text input
       addressInput.style.display = 'block';
+      autocompleteContainer.style.display = 'none';
       placeAutocomplete = null;
     });
   }
@@ -270,6 +270,61 @@ window.__customerCache = null;
         .pac-icon {
           filter: invert(1) !important; /* Invert Google pin icons to fit dark mode better */
         }
+
+        /* Style for modern Google Place Autocomplete component */
+        gmp-place-autocomplete {
+          color-scheme: dark !important;
+          width: 100% !important;
+          display: block !important;
+          background: transparent !important;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+        }
+
+        gmp-place-autocomplete::part(input) {
+          background-color: var(--surface, #1a1a2e) !important;
+          color: var(--text, #e8eaf6) !important;
+          border: 1px solid var(--border, rgba(255,255,255,0.07)) !important;
+          border-radius: 8px !important;
+          font-size: 13px !important;
+          font-family: inherit !important;
+          height: 38px !important;
+          box-sizing: border-box !important;
+          width: 100% !important;
+          padding: 8px 12px !important;
+          outline: none !important;
+          transition: border-color var(--trans, 0.2s ease) !important;
+          color-scheme: dark !important;
+        }
+
+        gmp-place-autocomplete::part(input):focus {
+          border-color: var(--accent, #e040fb) !important;
+        }
+
+        gmp-place-autocomplete::part(prediction-list) {
+          background-color: var(--card, #1f2b47) !important;
+          border: 1px solid var(--border, rgba(255,255,255,0.07)) !important;
+          border-radius: 8px !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,.5) !important;
+          font-family: inherit !important;
+          color: var(--text, #e8eaf6) !important;
+          z-index: 999999 !important;
+          margin-top: 4px !important;
+          color-scheme: dark !important;
+        }
+
+        gmp-place-autocomplete::part(prediction) {
+          color: var(--text, #e8eaf6) !important;
+          background-color: transparent !important;
+          transition: background 0.15s ease !important;
+          cursor: pointer !important;
+        }
+
+        gmp-place-autocomplete::part(prediction):hover,
+        gmp-place-autocomplete::part(prediction):focus {
+          background-color: rgba(224, 64, 251, 0.12) !important;
+        }
       </style>
 
       <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
@@ -312,9 +367,8 @@ window.__customerCache = null;
 
             <div class="field" style="margin-bottom: 10px;">
               <label for="cust-address">SHIPPING / MAILING ADDRESS</label>
-              <div id="cust-address-autocomplete-container">
-                <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
-              </div>
+              <input type="text" id="cust-address" placeholder="123 Main St, Laval, QC H7T 1A1">
+              <div id="cust-address-autocomplete-container"></div>
               <div id="cust-address-err" style="color: #ff5252; font-size: 11px; margin-top: 4px; display: none; background: rgba(255,82,82,0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,82,82,0.2);"></div>
             </div>
 
