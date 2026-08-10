@@ -74,18 +74,8 @@
           '<h3 style="font-size:14px;font-weight:700;margin-bottom:12px">FDM Filament Quick-Reference &mdash; Creality K1C</h3>'+
           '<div class="table-wrap">'+
           '<table><thead><tr>'+
-            '<th>Material</th><th>Nozzle Range</th><th>Bed Temp</th><th>Speed</th><th>Dry Temp</th><th>Dry Time</th><th>Key Notes</th>'+
-          '</tr></thead><tbody>'+
-            '<tr><td style="font-weight:700;color:var(--accent)">PLA / CR-PLA</td><td>190-230C</td><td>25-60C</td><td>80-150mm/s</td><td>45-50C</td><td>4-8 hrs</td><td>Most forgiving. No enclosure needed. Good for beginners.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--accent)">PLA+ (Hyper)</td><td>190-230C</td><td>25-60C</td><td>100-300mm/s</td><td>45-50C</td><td>4-8 hrs</td><td>Stronger than PLA. K1C Hyper mode supports up to 300mm/s.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--gold)">PLA Silk</td><td>195-230C</td><td>30-60C</td><td>50-80mm/s</td><td>45C</td><td>4-6 hrs</td><td>Print slower for sheen. Brittle - avoid thin walls. No CF nozzle needed.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--gold)">PLA-CF (Carbon)</td><td>210-230C</td><td>45-60C</td><td>60-100mm/s</td><td>50C</td><td>6-8 hrs</td><td>Hardened nozzle REQUIRED (K1C has it). Abrasive. Strong and stiff.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--gold)">PLA WOOD</td><td>190-220C</td><td>20-45C</td><td>40-80mm/s</td><td>45C</td><td>4-6 hrs</td><td>Increase temp for darker wood look. Sand after for real wood feel.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--teal)">PETG</td><td>220-250C</td><td>70-85C</td><td>60-100mm/s</td><td>65C</td><td>4-8 hrs</td><td>Moisture-sensitive. Slight stringing normal. Good layer adhesion.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--red)">TPU / High Speed</td><td>220-240C</td><td>30-50C</td><td>20-40mm/s</td><td>50C</td><td>4-6 hrs</td><td>SPOOL HOLDER ONLY - do NOT load into CFS-C. Print slowly. Disable retraction.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--red)">ABS</td><td>230-250C</td><td>95-110C</td><td>60-80mm/s</td><td>70C</td><td>4-8 hrs</td><td>Enclosure required. Warp-prone. Good ventilation essential. Acetone smoothing.</td></tr>'+
-            '<tr><td style="font-weight:700;color:var(--text-muted)">ASA</td><td>240-260C</td><td>90-110C</td><td>50-80mm/s</td><td>70C</td><td>4-8 hrs</td><td>Like ABS but UV-resistant. Outdoors safe. Enclosure required.</td></tr>'+
-          '</tbody></table>'+
+            '<th>Material</th><th>Nozzle Range</th><th>Bed Temp</th><th>Speed</th><th>Dry Temp</th><th>Meters / 1kg</th><th>CFS-C Safe</th><th>Notes</th>'+
+          '</tr></thead><tbody id="p3-ref-tbody"></tbody></table>'+
           '</div>'+
         '</div>'+
 
@@ -213,6 +203,8 @@
   });
 
   var items=[],editId=null;
+  var PARAM_FILE='filament_parameters.json';
+  var params=[];
 
   function parseTime(t){
     if(!t)return 0;
@@ -222,7 +214,61 @@
     return h+(m/60);
   }
 
-  async function load(){items=await window.makerAPI.readData(FILE)||[];render();}
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  async function loadFilamentParameters() {
+    try {
+      let fetchFunc = null;
+      if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
+        fetchFunc = window.MAKER_CONFIG.fetchFromDatabase;
+      }
+      if (fetchFunc) {
+        const remoteData = await fetchFunc('Filament Parameters ');
+        if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
+          const startIndex = (remoteData[0] && (remoteData[0][0] === 'Material' || remoteData[0][0] === 'material')) ? 1 : 0;
+          params = remoteData.slice(startIndex).map(row => ({
+            material: row[0] || '',
+            bestFor: row[1] || '',
+            uv: row[2] || '',
+            water: row[3] || '',
+            foodSafe: row[4] || '',
+            strength: row[5] || '',
+            flexibility: row[6] || '',
+            cfscSafe: row[7] || '',
+            notes: row[8] || '',
+            meters: parseInt(row[9]) || 0,
+            nozzle: row[10] || '',
+            bed: row[11] || '',
+            speed: row[12] || '',
+            dry: row[13] || ''
+          })).filter(p => p.material);
+
+          await window.makerAPI.writeData(PARAM_FILE, params);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('[Print3D] Failed loading remote filament parameters:', err);
+    }
+
+    try {
+      params = await window.makerAPI.readData(PARAM_FILE) || [];
+    } catch (e) {
+      params = [];
+    }
+  }
+
+  async function load(){
+    items=await window.makerAPI.readData(FILE)||[];
+    await loadFilamentParameters();
+    render();
+  }
   async function sv(){await window.makerAPI.writeData(FILE,items);}
 
   function render(){
@@ -277,6 +323,22 @@
         items=items.filter(function(x){return x.id!==b.dataset.id;});await sv();render();
       });
     });
+
+    var refTbody = g('p3-ref-tbody');
+    if (refTbody && params && params.length > 0) {
+      refTbody.innerHTML = params.map(function(p) {
+        return '<tr>' +
+          '<td style="font-weight:700;color:var(--accent)">' + escapeHtml(p.material) + '</td>' +
+          '<td>' + escapeHtml(p.nozzle) + '</td>' +
+          '<td>' + escapeHtml(p.bed) + '</td>' +
+          '<td>' + escapeHtml(p.speed) + '</td>' +
+          '<td>' + escapeHtml(p.dry) + '</td>' +
+          '<td style="font-family:monospace;font-weight:700;color:var(--teal)">' + (p.meters ? p.meters + ' m' : '—') + '</td>' +
+          '<td>' + escapeHtml(p.cfscSafe) + '</td>' +
+          '<td>' + escapeHtml(p.notes) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
   }
 
   g('p3-save').addEventListener('click',async function(){

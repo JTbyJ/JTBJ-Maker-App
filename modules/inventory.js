@@ -198,7 +198,25 @@ window.__makerInit_inventory = function () {
   // Load from memory cache or fetch from Google Sheets
   loadInventory(false);
   prepareInventoryForm(null);
+  populateInventoryCatFilter();
 };
+
+async function populateInventoryCatFilter() {
+  if (!window.OSOT_CATS) {
+    if (window.loadCategories) {
+      await window.loadCategories();
+    }
+  }
+  const cats = window.OSOT_CATS || {};
+  const filterSel = document.getElementById('inv-cat-filter');
+  if (filterSel) {
+    let html = '<option value="ALL">All Categories</option>';
+    Object.keys(cats).forEach(code => {
+      html += `<option value="${code}">${cats[code].label} (${code})</option>`;
+    });
+    filterSel.innerHTML = html;
+  }
+}
 
 /**
  * Generates an SVG QR Code representation for printable labels

@@ -4,7 +4,7 @@
   var panel=document.createElement('div');
   panel.id='panel-sku';panel.className='module-panel';
 
-  /* ── SHARED OSOT CATEGORY SYSTEM ── */
+  /* ── FALLBACK OSOT CATEGORY SYSTEM ── */
   var OSOT_CATS={
     'FIL':{label:'Filament',     color:'var(--accent)',    subs:{PLA:'PLA',PTG:'PETG',TPU:'TPU',ABS:'ABS',SLK:'Silk',PLX:'PLA-CF',WOD:'PLA Wood'}},
     'MAT':{label:'Materials',    color:'var(--gold)',      subs:{WOD:'Wood Board',ACR:'Acrylic',MDF:'MDF',SLT:'Slate',LTH:'Leather',CRK:'Cork'}},
@@ -13,6 +13,17 @@
     'PKG':{label:'Packaging',    color:'var(--text-muted)',subs:{PLY:'Poly Mailer',BOX:'Box',TSS:'Tissue Paper',STK:'Sticker',RBN:'Ribbon',BAG:'Gift Bag'}},
     'SUB':{label:'Sublimation Supplies',color:'var(--red)',subs:{PPR:'Sub Paper',INK:'Sub Ink',MWP:'Mug Wrap',SHK:'Shrink Wrap'}}
   };
+
+  async function ensureCategories() {
+    if (!window.OSOT_CATS) {
+      if (window.loadCategories) {
+        await window.loadCategories();
+      } else {
+        window.OSOT_CATS = OSOT_CATS;
+      }
+    }
+    OSOT_CATS = window.OSOT_CATS || OSOT_CATS;
+  }
 
   /* ── AUTO-SEQUENCE: find next number for a given CAT-SUBCAT ── */
   function nextSeq(items,catCode,subCode){
@@ -32,7 +43,7 @@
     var html='';
     Object.keys(OSOT_CATS).forEach(function(code){
       var sel=(selected===code)?' selected':'';
-      html+='<option value="'+code+'"'+sel+'>'+code+' - '+OSOT_CATS[code].label+'</option>';
+      html+='<option value="'+code+'">'+code+' - '+OSOT_CATS[code].label+'</option>';
     });
     return html;
   }
@@ -42,10 +53,19 @@
     if(catCode&&OSOT_CATS[catCode]){
       Object.keys(OSOT_CATS[catCode].subs).forEach(function(sub){
         var sel=(selected===sub)?' selected':'';
-        html+='<option value="'+sub+'"'+sel+'>'+sub+' - '+OSOT_CATS[catCode].subs[sub]+'</option>';
+        html+='<option value="'+sub+'">'+sub+' - '+OSOT_CATS[catCode].subs[sub]+'</option>';
       });
     }
     return html;
+  }
+
+  function buildFilterOptions() {
+    var html = '<option value="">All Categories</option>';
+    Object.keys(OSOT_CATS).forEach(function(code) {
+      html += '<option value="' + code + '">' + code + ' - ' + OSOT_CATS[code].label + '</option>';
+    });
+    var el = $('sku-cat-filter');
+    if (el) el.innerHTML = html;
   }
 
   function escapeHtml(str) {
@@ -89,7 +109,7 @@
       /* CATEGORY + SUBCATEGORY SELECTS */
       '<div class="input-row">'+
         '<div class="field">'+
-          '<label>CATEGORY GROUP</label>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">CATEGORY GROUP</label><button type="button" class="btn btn-ghost btn-sm" data-goto="categories" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>'+
           '<select id="sku-catgroup" style="font-family:monospace;font-weight:700">'+
             buildCatOptions('FIL')+
           '</select>'+
@@ -147,12 +167,6 @@
       '<div class="search-box"><input id="sku-search" placeholder="Search SKUs..."></div>'+
       '<select id="sku-cat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">'+
         '<option value="">All Categories</option>'+
-        '<option value="FIL">FIL - Filament</option>'+
-        '<option value="MAT">MAT - Materials</option>'+
-        '<option value="BLK">BLK - Blanks</option>'+
-        '<option value="CONS">CONS - Consumables</option>'+
-        '<option value="PKG">PKG - Packaging</option>'+
-        '<option value="SUB">SUB - Sublimation Supplies</option>'+
       '</select>'+
       '<select id="sku-class-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px">'+
         '<option value="">All Classifications</option>'+
@@ -281,6 +295,15 @@
 
   /* ── LOAD ── */
   async function load(){
+    await ensureCategories();
+
+    // Re-build select options based on dynamic categories
+    var firstCat = Object.keys(OSOT_CATS)[0] || 'FIL';
+    var firstSub = Object.keys((OSOT_CATS[firstCat] || {subs:{}}).subs)[0] || '';
+    $('sku-catgroup').innerHTML = buildCatOptions(firstCat);
+    $('sku-subcat').innerHTML = buildSubcatOptions(firstCat, firstSub);
+    buildFilterOptions();
+
     try {
       let fetchFunc = (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase);
       if (fetchFunc) {
@@ -291,7 +314,7 @@
             id: row[0] || '',
             sku: row[1] || '',
             name: row[2] || '',
-            cat: row[3] || 'FIL',
+            cat: row[3] || firstCat,
             subcat: row[4] || '',
             brand: row[5] || '',
             cost: Number(row[6]) || 0,
@@ -380,8 +403,8 @@
         var i=items.find(function(x){return x.id===b.dataset.id;});if(!i)return;
         editId=b.dataset.id;
         $('sku-custom').value=i.sku||'';
-        $('sku-catgroup').value=i.cat||'FIL';
-        $('sku-subcat').innerHTML=buildSubcatOptions(i.cat||'FIL',i.subcat||'');
+        $('sku-catgroup').value=i.cat || Object.keys(OSOT_CATS)[0];
+        $('sku-subcat').innerHTML=buildSubcatOptions(i.cat || Object.keys(OSOT_CATS)[0], i.subcat || '');
         $('sku-seq').value='';
         $('sku-pname').value=i.name||'';
         $('sku-brand').value=i.brand||'';
@@ -466,10 +489,12 @@
     $('sku-retail').value='';
     $('sku-notes').value='';
     $('sku-status').value='Active';
-    $('sku-catgroup').value='FIL';
-    $('sku-subcat').innerHTML=buildSubcatOptions('FIL','PLA');
+    var defaultCat = Object.keys(OSOT_CATS)[0] || 'FIL';
+    var defaultSub = Object.keys((OSOT_CATS[defaultCat] || {subs:{}}).subs)[0] || '';
+    $('sku-catgroup').value = defaultCat;
+    $('sku-subcat').innerHTML=buildSubcatOptions(defaultCat, defaultSub);
     /* Auto-suggest next sequence */
-    var nextNum=nextSeq(items,'FIL','PLA');
+    var nextNum=nextSeq(items, defaultCat, defaultSub);
     $('sku-seq').value=nextNum;
     buildPreview();
     calcMargin();
