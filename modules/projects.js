@@ -5,7 +5,13 @@
   panel.id='panel-projects';panel.className='module-panel';
 
   panel.innerHTML=
-    '<div class="page-header"><h2>Project Log</h2><p>Track craft projects, costs, revenue &amp; profit</p></div>'+
+    '<div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">' +
+    '  <div>' +
+    '    <h2>Project Log</h2>' +
+    '    <p>Track craft projects, costs, revenue &amp; profit</p>' +
+    '  </div>' +
+    '  <button class="btn btn-ghost" id="proj-sync-btn">🔄 Sync</button>' +
+    '</div>' +
     '<div class="stat-row">'+
       '<div class="stat-box"><div class="sv" style="color:var(--accent)" id="proj-total">0</div><div class="sl">Total Projects</div></div>'+
       '<div class="stat-box"><div class="sv" style="color:var(--teal)" id="proj-revenue">$0.00</div><div class="sl">Total Revenue</div></div>'+
@@ -365,6 +371,11 @@
       });
     });
   }
+
+  g('proj-sync-btn').addEventListener('click', async function() {
+    g('proj-tbody').innerHTML = '<tr><td colspan="10" class="empty-state"><p>Syncing Project Log with Google Sheets...</p></td></tr>';
+    await load();
+  });
 
   g('proj-save').addEventListener('click',async function(){
     var name=g('proj-name').value.trim();if(!name)return;

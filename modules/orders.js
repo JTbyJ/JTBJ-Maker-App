@@ -36,9 +36,12 @@
             z-index: 99999 !important;
           }
         </style>
-        <div class="page-header">
-          <h2>Sales Orders Directory</h2>
-          <p>Record orders, build custom customer invoices, calculate exact margins, and sync transaction lines to your Google Database.</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+          <div>
+            <h2>Sales Orders Directory</h2>
+            <p>Record orders, build custom customer invoices, calculate exact margins, and sync transaction lines to your Google Database.</p>
+          </div>
+          <button class="btn btn-ghost" id="ord-sync-btn">🔄 Sync</button>
         </div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
@@ -164,6 +167,11 @@
   };
 
   function setupEvents(){
+    g('ord-sync-btn').addEventListener('click', async function() {
+      g('ord-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:20px;">Syncing orders with Google Sheets...</td></tr>';
+      await load();
+    });
+
     g('ord-tab-list-btn').addEventListener('click',function(){switchTab('list');});
     g('ord-tab-form-btn').addEventListener('click',function(){
       // Generate next serial if creating a new order

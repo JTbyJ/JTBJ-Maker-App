@@ -40,9 +40,12 @@ window.__productsCache = null;
             z-index: 99999 !important;
           }
         </style>
-        <div class="page-header">
-          <h2>Product Catalog &amp; BOM Builder</h2>
-          <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+          <div>
+            <h2>Product Catalog &amp; BOM Builder</h2>
+            <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+          </div>
+          <button class="btn btn-ghost" id="prod-sync-btn">🔄 Sync</button>
         </div>
 
         <div style="display:flex;gap:10px;margin-bottom:14px">
@@ -307,6 +310,12 @@ window.__productsCache = null;
         g('p-bom-qty').value='1';
         renderBOM();
       }
+    });
+
+    g('prod-sync-btn').addEventListener('click', async function() {
+      g('prod-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Syncing products with Google Sheets...</td></tr>';
+      window.__productsCache = null;
+      await load();
     });
 
     g('prod-form').addEventListener('submit',async function(e){
