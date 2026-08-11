@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://maps.googleapis.com https://places.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://maps.googleapis.com; img-src 'self' data: https://maps.gstatic.com https://maps.googleapis.com; font-src 'self' https://fonts.gstatic.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://maps.googleapis.com https://places.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://maps.googleapis.com; img-src 'self' data: https: http:; font-src 'self' https://fonts.gstatic.com;" />
   <title>Just Jane Maker Lab</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -116,12 +116,49 @@
       <div class="nav-item" data-panel="suppliers"><span class="nav-icon">◎</span><span class="nav-label">Suppliers</span></div>
       <div class="nav-item" data-panel="assets"><span class="nav-icon">&#9632;</span><span class="nav-label">Assets &amp; Accounts</span></div>
     </div>
-    <div id="sidebar-footer"><span>⚡</span><span id="ver-label">v1.0.0</span></div>
+    <div id="sidebar-footer"><span>⚡</span><span id="ver-label">v2.0.0</span></div>
   </nav>
 
   <div id="main">
     <div id="topbar"><div id="topbar-title">Dashboard</div><div id="topbar-date"></div></div>
     
+    <!-- MASTER APP LIGHTBOX MODAL (Shared across all tabs) -->
+    <div id="photo-lightbox" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100000; align-items:center; justify-content:center; cursor:pointer;" onclick="this.style.display='none'">
+      <img id="lightbox-img" style="max-width:90%; max-height:90%; border-radius:8px; border:3px solid #fff; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+    </div>
+
+    <script>
+      window.getDirectPhotoUrl = function(url) {
+        if (!url) return '';
+        url = url.trim();
+        if (url.includes('drive.google.com')) {
+          let id = '';
+          const dMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+          if (dMatch && dMatch[1]) {
+            id = dMatch[1];
+          } else {
+            const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (idMatch && idMatch[1]) {
+              id = idMatch[1];
+            }
+          }
+          if (id) {
+            return 'https://lh3.googleusercontent.com/d/' + id;
+          }
+        }
+        return url;
+      };
+
+      window.openPhotoLightbox = function(url) {
+        const lightbox = document.getElementById('photo-lightbox');
+        const img = document.getElementById('lightbox-img');
+        if (lightbox && img) {
+          img.src = window.getDirectPhotoUrl(url);
+          lightbox.style.display = 'flex';
+        }
+      };
+    </script>
+
     <div id="module-frame">
       <!-- CUSTOMERS MODULE PANEL -->
       <div id="panel-customers" class="module-panel">
