@@ -1,5 +1,5 @@
 🛠️ Maker Lab Architecture & Module Coding Standards
-Document Version: 1.1.3
+Document Version: 2.0.0
 
 Target Environment: Electron / Vanilla JS Frontend + Google Sheets Backend API
 

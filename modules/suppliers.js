@@ -169,25 +169,45 @@ window.__suppliersCache = null;
       if (fetchFunc) {
         const remoteData = await fetchFunc('Suppliers');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
-          window.__suppliersCache = remoteData.slice(startIndex).map(row => {
-            return {
-              id: row[0] || '',
-              name: row[1] || '',
-              category: row[2] || 'Filament',
-              status: row[3] || 'Active',
-              rating: parseInt(row[4]) || 5,
-              website: row[5] || '',
-              contact: row[6] || '',
-              email: row[7] || '',
-              phone: row[8] || '',
-              lead: row[9] || '',
-              minOrder: row[10] || '',
-              shipping: row[11] || '',
-              notes: row[12] || ''
-            };
-          }).filter(x => x.id && x.status !== 'DELETED');
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'supplier_id' || h.includes('id'));
+          const nameIdx = header.findIndex(h => h === 'name' || h === 'supplier name' || h.includes('name'));
+          const catIdx = header.findIndex(h => h === 'category' || h.includes('category') || h.includes('cat'));
+          const statIdx = header.findIndex(h => h === 'status' || h.includes('status'));
+          const ratingIdx = header.findIndex(h => h === 'rating' || h.includes('rating') || h.includes('rate'));
+          const webIdx = header.findIndex(h => h === 'website' || h.includes('web') || h.includes('site'));
+          const contactIdx = header.findIndex(h => h === 'contact' || h === 'contact_person' || h.includes('contact') || h.includes('person'));
+          const emailIdx = header.findIndex(h => h === 'email' || h.includes('email') || h.includes('mail'));
+          const phoneIdx = header.findIndex(h => h === 'phone' || h.includes('phone') || h.includes('mobile'));
+          const leadIdx = header.findIndex(h => h === 'lead' || h === 'lead_time' || h.includes('lead') || h.includes('time'));
+          const minIdx = header.findIndex(h => h === 'min' || h === 'min_order' || h.includes('min') || h.includes('order'));
+          const shipIdx = header.findIndex(h => h === 'shipping' || h === 'shipping_policy' || h.includes('ship'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('desc'));
 
+          const parsedList = [];
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+            parsedList.push({
+              id: idVal,
+              name: nameIdx !== -1 ? r[nameIdx] : '',
+              category: catIdx !== -1 ? r[catIdx] : 'Filament',
+              status: statIdx !== -1 ? r[statIdx] : 'Active',
+              rating: ratingIdx !== -1 ? (parseInt(r[ratingIdx]) || 5) : 5,
+              website: webIdx !== -1 ? r[webIdx] : '',
+              contact: contactIdx !== -1 ? r[contactIdx] : '',
+              email: emailIdx !== -1 ? r[emailIdx] : '',
+              phone: phoneIdx !== -1 ? r[phoneIdx] : '',
+              lead: leadIdx !== -1 ? r[leadIdx] : '',
+              minOrder: minIdx !== -1 ? r[minIdx] : '',
+              shipping: shipIdx !== -1 ? r[shipIdx] : '',
+              notes: notesIdx !== -1 ? r[notesIdx] : ''
+            });
+          }
+
+          window.__suppliersCache = parsedList.filter(x => x.id && x.status !== 'DELETED');
           await window.makerAPI.writeData(FILE, window.__suppliersCache);
           render();
           return;
@@ -199,6 +219,10 @@ window.__suppliersCache = null;
 
     window.__suppliersCache = localData;
     render();
+
+    if (forceRefresh) {
+      alert('🔄 Suppliers synchronized successfully!\n' + (window.__suppliersCache ? window.__suppliersCache.length : 0) + ' entries loaded/updated in the database.');
+    }
   }
 
   async function sv(){

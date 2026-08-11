@@ -40,9 +40,12 @@ window.__productsCache = null;
             z-index: 99999 !important;
           }
         </style>
-        <div class="page-header">
-          <h2>Product Catalog &amp; BOM Builder</h2>
-          <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+          <div>
+            <h2>Product Catalog &amp; BOM Builder</h2>
+            <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+          </div>
+          <button class="btn btn-ghost" id="prod-sync-btn">🔄 Sync</button>
         </div>
 
         <div style="display:flex;gap:10px;margin-bottom:14px">
@@ -81,6 +84,9 @@ window.__productsCache = null;
               </div>
               <div class="field" style="margin-bottom:10px">
                 <label>SKU</label><input type="text" id="p-sku" required placeholder="e.g. FIN-TUM-GLIT">
+              </div>
+              <div class="field" style="margin-bottom:10px">
+                <label>Photo URL / Image Link</label><input type="text" id="p-photo" placeholder="e.g. https://imgur.com/example.png">
               </div>
               <div style="display:flex;gap:10px;margin-bottom:10px">
                 <div class="field" style="flex:1">
@@ -306,6 +312,12 @@ window.__productsCache = null;
       }
     });
 
+    g('prod-sync-btn').addEventListener('click', async function() {
+      g('prod-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Syncing products with Google Sheets...</td></tr>';
+      window.__productsCache = null;
+      await load();
+    });
+
     g('prod-form').addEventListener('submit',async function(e){
       e.preventDefault();
       var name=g('p-name').value;
@@ -325,6 +337,8 @@ window.__productsCache = null;
       var labCost=labHrs*labRate;
       var cogs=matCost+labCost+etsyFee;
       var margin=salePrice>0?((salePrice-cogs)/salePrice)*100:0;
+
+      var photo=g('p-photo').value.trim();
 
       var obj={
         id:editId||'prod_'+Date.now(),
@@ -351,7 +365,8 @@ window.__productsCache = null;
             unitMetric:b.unitMetric || 'ea',
             unitCost:b.unitCost
           };
-        })
+        }),
+        photo:photo
       };
       if(editId){var idx=products.findIndex(function(x){return x.id===editId;});if(idx>=0)products[idx]=obj;}
       else products.unshift(obj);
@@ -364,7 +379,7 @@ window.__productsCache = null;
             JSON.stringify(obj.platforms), obj.salePrice, obj.etsyFee,
             obj.description, obj.notes, obj.labourHrs, obj.labourRate,
             obj.labourCost, obj.materialCost, obj.cogs, obj.margin,
-            JSON.stringify(obj.bom)
+            JSON.stringify(obj.bom), obj.photo
           ]);
         }
       } catch (err) {
@@ -426,37 +441,66 @@ window.__productsCache = null;
       if (fetchFunc) {
         const remoteData = await fetchFunc('Products');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          // Robust header row check including SKU / ID column variations
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id' || remoteData[0][0] === 'SKU' || remoteData[0][0] === 'sku')) ? 1 : 0;
-          products = remoteData.slice(startIndex).map(row => {
-            let platforms = [];
-            try { platforms = JSON.parse(row[5] || '[]'); } catch(e) {
-              platforms = row[5] ? row[5].split(',') : [];
-            }
-            let bom = [];
-            try { bom = JSON.parse(row[16] || '[]'); } catch(e) {}
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'product_id' || h.includes('id'));
+          const nameIdx = header.findIndex(h => h === 'name' || h === 'product name' || h.includes('name'));
+          const catIdx = header.findIndex(h => h === 'category' || h.includes('cat'));
+          const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
+          const statIdx = header.findIndex(h => h === 'status' || h.includes('status'));
+          const platIdx = header.findIndex(h => h === 'platforms' || h === 'sales platforms' || h.includes('plat'));
+          const priceIdx = header.findIndex(h => h === 'saleprice' || h === 'sale price' || h === 'price' || h.includes('price') || h.includes('retail'));
+          const feeIdx = header.findIndex(h => h === 'etsyfee' || h === 'etsy fee' || h.includes('fee'));
+          const descIdx = header.findIndex(h => h === 'description' || h.includes('desc'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('mfg'));
+          const hrsIdx = header.findIndex(h => h === 'labourhrs' || h === 'labour hours' || h === 'labor hours' || h.includes('hrs') || h.includes('hours'));
+          const rateIdx = header.findIndex(h => h === 'labourrate' || h === 'hourly rate' || h.includes('rate'));
+          const labCostIdx = header.findIndex(h => h === 'labourcost' || h === 'labour cost' || h === 'labor cost' || h.includes('labourcost') || h.includes('laborcost'));
+          const matCostIdx = header.findIndex(h => h === 'materialcost' || h === 'material cost' || h.includes('materialcost'));
+          const cogsIdx = header.findIndex(h => h === 'cogs' || h.includes('cogs'));
+          const marginIdx = header.findIndex(h => h === 'margin' || h.includes('margin'));
+          const bomIdx = header.findIndex(h => h === 'bom' || h === 'bill of materials' || h.includes('bom'));
+          const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
-            return {
-              id: row[0] || '',
-              name: row[1] || '',
-              category: row[2] || '',
-              sku: row[3] || '',
-              status: row[4] || 'Active',
+          const parsedProds = [];
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+
+            let platforms = [];
+            const rawPlat = platIdx !== -1 ? r[platIdx] : '';
+            try { platforms = JSON.parse(rawPlat || '[]'); } catch(e) {
+              platforms = rawPlat ? rawPlat.split(',') : [];
+            }
+
+            let bom = [];
+            const rawBom = bomIdx !== -1 ? r[bomIdx] : '';
+            try { bom = JSON.parse(rawBom || '[]'); } catch(e) {}
+
+            parsedProds.push({
+              id: idVal,
+              name: nameIdx !== -1 ? r[nameIdx] : '',
+              category: catIdx !== -1 ? r[catIdx] : '',
+              sku: skuIdx !== -1 ? r[skuIdx] : '',
+              status: statIdx !== -1 ? r[statIdx] : 'Active',
               platforms: platforms,
-              salePrice: parseFloat(row[6]) || 0,
-              etsyFee: parseFloat(row[7]) || 0,
-              description: row[8] || '',
-              notes: row[9] || '',
-              labourHrs: parseFloat(row[10]) || 0,
-              labourRate: parseFloat(row[11]) || 20,
-              labourCost: parseFloat(row[12]) || 0,
-              materialCost: parseFloat(row[13]) || 0,
-              cogs: parseFloat(row[14]) || 0,
-              margin: parseFloat(row[15]) || 0,
-              bom: bom
-            };
-          }).filter(x => x.id && x.status !== 'DELETED');
-          
+              salePrice: priceIdx !== -1 ? (parseFloat(r[priceIdx]) || 0) : 0,
+              etsyFee: feeIdx !== -1 ? (parseFloat(r[feeIdx]) || 0) : 0,
+              description: descIdx !== -1 ? r[descIdx] : '',
+              notes: notesIdx !== -1 ? r[notesIdx] : '',
+              labourHrs: hrsIdx !== -1 ? (parseFloat(r[hrsIdx]) || 0) : 0,
+              labourRate: rateIdx !== -1 ? (parseFloat(r[rateIdx]) || 20) : 20,
+              labourCost: labCostIdx !== -1 ? (parseFloat(r[labCostIdx]) || 0) : 0,
+              materialCost: matCostIdx !== -1 ? (parseFloat(r[matCostIdx]) || 0) : 0,
+              cogs: cogsIdx !== -1 ? (parseFloat(r[cogsIdx]) || 0) : 0,
+              margin: marginIdx !== -1 ? (parseFloat(r[marginIdx]) || 0) : 0,
+              bom: bom,
+              photo: photoIdx !== -1 ? r[photoIdx] : ''
+            });
+          }
+
+          products = parsedProds.filter(x => x.id && x.status !== 'DELETED');
           window.__productsCache = products;
           await window.makerAPI.writeData(FILE, products);
           renderList();
@@ -482,17 +526,56 @@ window.__productsCache = null;
     var tbody=g('prod-tbody');if(!tbody)return;
     tbody.innerHTML='';
 
+    // Read current live cache from inventory to calculate up-to-date COGS metrics
+    var currentInventory = window.__inventoryCache || [];
+
     products.forEach(function(p){
       if(q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q))return;
-      var tr=document.createElement('tr');
-      var profit=p.salePrice-p.cogs;
-      tr.innerHTML=`
-        <td><div style="font-weight:700">${p.name}</div><div style="font-size:11px;color:var(--muted)">${p.category} • ${p.platforms.join(', ')}</div></td>
+
+      // Recalculate materials dynamically based on live inventory per-unit cost
+      var dynamicMatCost = 0;
+      if (p.bom && Array.isArray(p.bom)) {
+        p.bom.forEach(function(bomItem) {
+          const invItem = currentInventory.find(x => x.id === bomItem.itemId || x.sku === bomItem.itemId);
+          if (invItem) {
+            const cost = Number(invItem.cost || 0);
+            const capacity = Number(invItem.metricCapacity || 1);
+            const liveUnitCost = cost / capacity;
+            dynamicMatCost += bomItem.qty * liveUnitCost;
+          } else {
+            dynamicMatCost += bomItem.qty * (bomItem.unitCost || 0);
+          }
+        });
+      }
+
+      var dynamicCogs = dynamicMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
+      var dynamicMargin = p.salePrice > 0 ? ((p.salePrice - dynamicCogs) / p.salePrice) * 100 : 0;
+      var profit = p.salePrice - dynamicCogs;
+
+      var photoCell = '';
+      if (p.photo) {
+        var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(p.photo) : p.photo;
+        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${p.photo}')">`;
+      } else {
+        photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
+      }
+
+      var tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${photoCell}
+            <div>
+              <div style="font-weight:700">${p.name}</div>
+              <div style="font-size:11px;color:var(--muted)">${p.category} • ${p.platforms.join(', ')}</div>
+            </div>
+          </div>
+        </td>
         <td><span class="tag">${p.sku}</span></td>
-        <td><div>Lab: $${p.labourCost.toFixed(2)}</div><div style="font-size:11px;color:var(--muted)">Mat: $${p.materialCost.toFixed(2)}</div></td>
-        <td style="font-weight:600">$${p.cogs.toFixed(2)}</td>
+        <td><div>Lab: $${(p.labourCost || 0).toFixed(2)}</div><div style="font-size:11px;color:var(--muted)">Mat: $${dynamicMatCost.toFixed(2)}</div></td>
+        <td style="font-weight:600">$${dynamicCogs.toFixed(2)}</td>
         <td style="font-weight:600">$${p.salePrice.toFixed(2)}</td>
-        <td><span class="badge ${profit>0?'badge-green':'badge-red'}">$${profit.toFixed(2)} (${p.margin.toFixed(0)}%)</span></td>
+        <td><span class="badge ${profit>0?'badge-green':'badge-red'}">$${profit.toFixed(2)} (${dynamicMargin.toFixed(0)}%)</span></td>
         <td>
           <button class="btn btn-ghost btn-sm prode" data-id="${p.id}">✎</button>
           <button class="btn btn-danger btn-sm prodd" data-id="${p.id}">🗑</button>
@@ -510,6 +593,7 @@ window.__productsCache = null;
           g('p-platforms').value=JSON.stringify(pItem.platforms);g('p-price').value=pItem.salePrice;g('p-fee').value=pItem.etsyFee;
           g('p-desc').value=pItem.description;g('p-notes').value=pItem.notes;
           g('p-lab-hrs').value=pItem.labourHrs;g('p-lab-rate').value=pItem.labourRate;
+          g('p-photo').value=pItem.photo || '';
           bomList=pItem.bom.map(function(x){
             return {
               itemId:x.itemId,
