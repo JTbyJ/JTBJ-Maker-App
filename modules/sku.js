@@ -408,7 +408,8 @@
 
       var photoCell = '';
       if (i.photo) {
-        photoCell = '<img src="' + escapeHtml(i.photo) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(\'' + escapeHtml(i.photo) + '\')">';
+        var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(i.photo) : i.photo;
+        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(\'' + escapeHtml(i.photo) + '\')">';
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }

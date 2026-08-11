@@ -396,6 +396,7 @@ async function loadInventory(forceRefresh = false) {
         const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('desc'));
         const unitMetricIdx = header.findIndex(h => h === 'unitmetric' || h === 'unit metric' || h.includes('metric'));
         const metricCapacityIdx = header.findIndex(h => h === 'metriccapacity' || h === 'metric capacity' || h.includes('capacity'));
+        const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
         for (let i = 1; i < rawRows.length; i++) {
           const r = rawRows[i];
@@ -422,7 +423,8 @@ async function loadInventory(forceRefresh = false) {
             supplier: supplierIdx !== -1 ? r[supplierIdx] : '',
             notes: notesIdx !== -1 ? r[notesIdx] : '',
             unitMetric: unitMetricIdx !== -1 ? r[unitMetricIdx] : 'ea',
-            metricCapacity: metricCapacityIdx !== -1 ? (Number(r[metricCapacityIdx]) || 1) : 1
+            metricCapacity: metricCapacityIdx !== -1 ? (Number(r[metricCapacityIdx]) || 1) : 1,
+            photo: photoIdx !== -1 ? r[photoIdx] : ''
           });
         }
         
@@ -515,7 +517,8 @@ function renderInventoryTable(items) {
     const imageLink = item.photo || (resolvedSku ? resolvedSku.photo : '');
     var photoCell = '';
     if (imageLink) {
-      photoCell = `<img src="${escapeHtml(imageLink)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${escapeHtml(imageLink)}')">`;
+      var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(imageLink) : imageLink;
+      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${escapeHtml(imageLink)}')">`;
     } else {
       photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
     }
