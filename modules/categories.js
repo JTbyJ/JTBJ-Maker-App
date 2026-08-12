@@ -257,6 +257,10 @@ window.OSOT_CATS = null;
     window.__categoriesCache = localData;
     updateGlobalCats();
     renderCatTable();
+
+    if (forceRefresh) {
+      alert('🔄 Categories synchronized successfully!\n' + items.length + ' entries loaded/updated in the database.');
+    }
   };
 
   function updateGlobalCats() {
