@@ -480,20 +480,38 @@ window.__customerCache = null;
       if (fetchFunc) {
         const remoteData = await fetchFunc('Customers');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
-          
-          remoteDataParsed = remoteData.slice(startIndex).map(row => ({
-            id: row[0] || '',
-            name: row[1] || '',
-            email: row[2] || '',
-            phone: formatPhoneNumber(row[3] || ''),
-            address: row[4] || '',
-            finishPref: row[5] || '',
-            igHandle: row[6] || '',
-            type: row[7] || 'Personal',
-            notes: row[8] || '',
-            createdAt: row[9] || ''
-          })).filter(c => c.name || c.email);
+          remoteDataParsed = [];
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'customer_id' || h.includes('id'));
+          const nameIdx = header.findIndex(h => h === 'name' || h === 'full name' || h.includes('name'));
+          const emailIdx = header.findIndex(h => h === 'email' || h === 'e-mail' || h.includes('email'));
+          const phoneIdx = header.findIndex(h => h === 'phone' || h.includes('phone') || h.includes('mobile'));
+          const addrIdx = header.findIndex(h => h === 'address' || h.includes('address') || h.includes('street'));
+          const finishIdx = header.findIndex(h => h === 'finish_preference' || h === 'finishpref' || h.includes('finish'));
+          const igIdx = header.findIndex(h => h === 'instagram_handle' || h === 'ighandle' || h.includes('instagram') || h.includes('ig'));
+          const typeIdx = header.findIndex(h => h === 'customer_type' || h === 'type' || h.includes('type'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('pref'));
+          const dateIdx = header.findIndex(h => h === 'created_at' || h === 'createdat' || h.includes('created'));
+
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+            remoteDataParsed.push({
+              id: idVal,
+              name: nameIdx !== -1 ? r[nameIdx] : '',
+              email: emailIdx !== -1 ? r[emailIdx] : '',
+              phone: phoneIdx !== -1 ? formatPhoneNumber(r[phoneIdx]) : '',
+              address: addrIdx !== -1 ? r[addrIdx] : '',
+              finishPref: finishIdx !== -1 ? r[finishIdx] : '',
+              igHandle: igIdx !== -1 ? r[igIdx] : '',
+              type: typeIdx !== -1 ? r[typeIdx] : 'Personal',
+              notes: notesIdx !== -1 ? r[notesIdx] : '',
+              createdAt: dateIdx !== -1 ? r[dateIdx] : ''
+            });
+          }
+          remoteDataParsed = remoteDataParsed.filter(c => c.name || c.email);
         }
       }
 
