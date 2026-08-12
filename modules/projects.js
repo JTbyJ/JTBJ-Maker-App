@@ -267,13 +267,14 @@
       const cap = Number(inv.metricCapacity || 1);
       const cost = Number(inv.cost || 0);
       const calculatedUnitCost = cost / cap;
+      const bomIdentifier = inv.sku || inv.id;
 
-      var existing = activeBom.find(function(b) { return b.itemId === itemId; });
+      var existing = activeBom.find(function(b) { return b.itemId === bomIdentifier; });
       if (existing) {
         existing.qty += qty;
       } else {
         activeBom.push({
-          itemId: itemId,
+          itemId: bomIdentifier,
           name: inv.name,
           qty: qty,
           unitMetric: inv.unitMetric || 'ea',
@@ -292,13 +293,22 @@
 
     var totalMatCost = 0;
     activeBom.forEach(function(b, idx) {
-      var lineTotal = b.qty * (b.unitCost || 0);
+      let uCost = Number(b.unitCost || 0);
+      if (uCost === 0) {
+        const skuCatalog = window.__skuCatalogCache || [];
+        const masterSku = skuCatalog.find(s => s.sku === b.itemId);
+        if (masterSku) {
+          uCost = Number(masterSku.cost || 0);
+        }
+      }
+
+      var lineTotal = b.qty * uCost;
       totalMatCost += lineTotal;
 
       var tr = document.createElement('tr');
       tr.innerHTML = '<td>' + esc(b.name) + '</td>'+
         '<td>' + b.qty + ' ' + esc(b.unitMetric || 'ea') + '</td>'+
-        '<td>$' + (b.unitCost || 0).toFixed(2) + '</td>'+
+        '<td>$' + uCost.toFixed(2) + '</td>'+
         '<td>$' + lineTotal.toFixed(2) + '</td>'+
         '<td><button type="button" class="btn btn-danger btn-sm p-bomr" style="padding:2px 6px;" data-idx="' + idx + '">×</button></td>';
       tbody.appendChild(tr);

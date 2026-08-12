@@ -294,13 +294,14 @@ window.__productsCache = null;
         var cap = Number(inv.metricCapacity || 1);
         const cost = Number(inv.cost || 0);
         const calculatedUnitCost = cost / cap;
+        const bomIdentifier = inv.sku || inv.id;
 
-        var existing=bomList.find(function(x){return x.itemId===id;});
+        var existing=bomList.find(function(x){return x.itemId===bomIdentifier;});
         if(existing){
           existing.qty+=qty;
         }else{
           bomList.push({
-            itemId:id,
+            itemId:bomIdentifier,
             name:inv.name,
             qty:qty,
             unitMetric: inv.unitMetric || 'ea',
@@ -543,7 +544,10 @@ window.__productsCache = null;
             const liveUnitCost = cost / capacity;
             dynamicMatCost += bomItem.qty * liveUnitCost;
           } else {
-            dynamicMatCost += bomItem.qty * (bomItem.unitCost || 0);
+            // Fallback to SKU master catalog cost if inventory item doesn't exist/out of stock
+            const masterSku = (window.__skuCatalogCache || []).find(s => s.sku === bomItem.itemId);
+            const baseCost = masterSku ? Number(masterSku.cost || 0) : Number(bomItem.unitCost || 0);
+            dynamicMatCost += bomItem.qty * baseCost;
           }
         });
       }
@@ -648,7 +652,17 @@ window.__productsCache = null;
   }
 
   function recalcSummary(){
-    var matCost=0;bomList.forEach(function(b){matCost+=b.qty*b.unitCost;});
+    var matCost=0;
+    bomList.forEach(function(b){
+      let uCost = Number(b.unitCost || 0);
+      if (uCost === 0) {
+        const masterSku = (window.__skuCatalogCache || []).find(s => s.sku === b.itemId);
+        if (masterSku) {
+          uCost = Number(masterSku.cost || 0);
+        }
+      }
+      matCost += b.qty * uCost;
+    });
     var hrs=parseFloat(g('p-lab-hrs').value)||0;
     var rate=parseFloat(g('p-lab-rate').value)||0;
     var fee=parseFloat(g('p-fee').value)||0;

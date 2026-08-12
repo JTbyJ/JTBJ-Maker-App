@@ -337,7 +337,7 @@
       const prod = products.find(p => p.id === line.productId || p.sku === line.productId);
       if (prod && prod.bom) {
         for (const bomItem of prod.bom) {
-          const invItem = inventory.find(inv => inv.id === bomItem.itemId);
+          const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
           if (invItem) {
             const qtyToSubtract = (bomItem.qty || 1) * line.qty;
             invItem.qty = Math.max(0, invItem.qty - qtyToSubtract);
@@ -741,7 +741,7 @@ async function importEtsyCSV(event) {
 
         // Subtract stock for each BOM item
         for (const bomItem of orderBom) {
-          const invItem = inventory.find(inv => inv.id === bomItem.itemId);
+          const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
           if (invItem) {
             const qtyToDeduct = (bomItem.qty || 1) * itemQty;
             invItem.qty = Math.max(0, invItem.qty - qtyToDeduct);
