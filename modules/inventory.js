@@ -52,7 +52,7 @@ window.__makerInit_inventory = function () {
             <input type="hidden" id="inv-form-id">
 
             <!-- SKU SELECTION (REFERENTIAL INTEGRITY) -->
-            <div class="field" style="margin-bottom:14px;">
+            <div class="field" style="margin-bottom:14px;" id="inv-sku-select-group">
               <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Select SKU Catalog Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="sku" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New SKU</button></div>
               <select id="inv-form-sku" style="width:100%; font-family:monospace; font-weight:700;" onchange="onInventorySkuChange()" required>
                 <!-- Populated dynamically -->
@@ -60,12 +60,40 @@ window.__makerInit_inventory = function () {
               <small style="color:var(--muted); margin-top:4px; display:block;">Choosing a SKU auto-fills Name, Category, Subcategory, and Brand from SKU database.</small>
             </div>
 
-            <div class="input-row">
+            <!-- Inline SKU Creation option -->
+            <div style="margin-bottom:14px; background: rgba(224,64,251,0.05); padding: 14px; border-radius: 8px; border: 1px solid var(--border);">
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--accent); cursor:pointer; margin-bottom:0;">
+                <input type="checkbox" id="inv-toggle-inline-sku" onchange="toggleInlineSkuFields()"> ⚡ Create a New SKU Inline
+              </label>
+
+              <div id="inv-inline-sku-fields" style="display:none; margin-top:12px;">
+                <div class="input-row">
+                  <div class="field" style="flex:1;"><label>New SKU Code (e.g. FIL-PLA-105)</label><input type="text" id="inv-inline-sku-code" placeholder="FIL-PLA-105" style="font-family:monospace; font-weight:700;"></div>
+                  <div class="field" style="flex:2;"><label>New Item Name</label><input type="text" id="inv-inline-sku-name" placeholder="Creality White PLA"></div>
+                </div>
+                <div class="input-row">
+                  <div class="field" style="flex:1;"><label>Category</label>
+                    <select id="inv-inline-sku-cat">
+                      <option value="FIL">Filament (FIL)</option>
+                      <option value="MAT">Raw Materials (MAT)</option>
+                      <option value="BLK">Blanks (BLK)</option>
+                      <option value="SUB">Sublimation Supplies (SUB)</option>
+                      <option value="PKG">Packaging (PKG)</option>
+                      <option value="CONS">Consumables (CONS)</option>
+                    </select>
+                  </div>
+                  <div class="field" style="flex:1;"><label>Subcategory (e.g. PLA)</label><input type="text" id="inv-inline-sku-subcat" placeholder="e.g. PLA"></div>
+                  <div class="field" style="flex:1;"><label>Brand / Manufacturer</label><input type="text" id="inv-inline-sku-brand" placeholder="Creality"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="input-row" id="inv-form-read-details-row">
               <div class="field" style="flex:2;"><label>Name</label><input type="text" id="inv-form-name" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
               <div class="field" style="flex:1;"><label>Brand</label><input type="text" id="inv-form-brand" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
             </div>
 
-            <div class="input-row">
+            <div class="input-row" id="inv-form-read-cats-row">
               <div class="field" style="flex:1;"><label>Category</label><input type="text" id="inv-form-cat" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
               <div class="field" style="flex:1;"><label>Subcategory</label><input type="text" id="inv-form-subcat" readonly style="background:rgba(255,255,255,0.04); color:var(--muted); outline:none;"></div>
             </div>
@@ -87,6 +115,10 @@ window.__makerInit_inventory = function () {
               <div class="field" style="flex:1;"><label>Type / Specs (e.g. PLA)</label><input type="text" id="inv-form-type" placeholder="Type Details"></div>
               <div class="field" style="flex:1;"><label>Colour / Finish</label><input type="text" id="inv-form-colour" placeholder="Colour"></div>
               <div class="field" style="flex:1;"><label>Storage Location</label><input type="text" id="inv-form-location" placeholder="e.g. Filament Box A"></div>
+            </div>
+
+            <div class="input-row">
+              <div class="field" style="flex:1;"><label>Photo URL / Image Link</label><input type="text" id="inv-form-photo" placeholder="e.g. https://imgur.com/example.png"></div>
             </div>
 
             <div class="input-row">
@@ -296,6 +328,13 @@ function generateQrSvg(text) {
 async function loadInventory(forceRefresh = false) {
   const tbody = document.getElementById('inventory-table-body');
 
+  // Load and cache SKU catalog beforehand to prevent async race conditions during render
+  try {
+    window.__skuCatalogCache = await window.makerAPI.readData('sku.json') || [];
+  } catch(e) {
+    window.__skuCatalogCache = [];
+  }
+
   // Use memory cache if available and refresh isn't forced
   if (!forceRefresh && window.__inventoryCache && Array.isArray(window.__inventoryCache)) {
     renderInventoryTable(window.__inventoryCache);
@@ -336,32 +375,56 @@ async function loadInventory(forceRefresh = false) {
       
       if (rawRows && Array.isArray(rawRows) && rawRows.length > 0) {
         remoteDataParsed = [];
-        const startIndex = (rawRows[0] && (rawRows[0][0] === 'ID' || rawRows[0][0] === 'id')) ? 1 : 0;
-        
-        for (let i = startIndex; i < rawRows.length; i++) {
+        const header = rawRows[0].map(h => String(h || '').trim().toLowerCase());
+        const idIdx = header.findIndex(h => h === 'id' || h === 'item_id' || h.includes('id'));
+        const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
+        const nameIdx = header.findIndex(h => h === 'name' || h === 'item name' || h.includes('name'));
+        const brandIdx = header.findIndex(h => h === 'brand' || h.includes('brand'));
+        const catIdx = header.findIndex(h => h === 'cat' || h === 'category' || h.includes('cat'));
+        const subcatIdx = header.findIndex(h => h === 'subcat' || h === 'subcategory' || h.includes('subcat'));
+        const typeIdx = header.findIndex(h => h === 'type' || h.includes('type'));
+        const colourIdx = header.findIndex(h => h === 'colour' || h === 'color' || h.includes('colour') || h.includes('color'));
+        const qtyIdx = header.findIndex(h => h === 'qty' || h === 'quantity' || h.includes('qty'));
+        const lowStockIdx = header.findIndex(h => h === 'lowstock' || h === 'low stock' || h.includes('low'));
+        const diameterIdx = header.findIndex(h => h === 'diameter' || h.includes('diameter'));
+        const weightIdx = header.findIndex(h => h === 'weight' || h.includes('weight'));
+        const printTempIdx = header.findIndex(h => h === 'printtemp' || h === 'print temp' || h.includes('print'));
+        const bedTempIdx = header.findIndex(h => h === 'bedtemp' || h === 'bed temp' || h.includes('bed'));
+        const costIdx = header.findIndex(h => h === 'cost' || h === 'price' || h.includes('cost'));
+        const locationIdx = header.findIndex(h => h === 'location' || h.includes('location') || h.includes('loc'));
+        const supplierIdx = header.findIndex(h => h === 'supplier' || h.includes('supplier') || h.includes('sup'));
+        const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('desc'));
+        const unitMetricIdx = header.findIndex(h => h === 'unitmetric' || h === 'unit metric' || h.includes('metric'));
+        const metricCapacityIdx = header.findIndex(h => h === 'metriccapacity' || h === 'metric capacity' || h.includes('capacity'));
+        const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
+
+        for (let i = 1; i < rawRows.length; i++) {
           const r = rawRows[i];
-          if (!r || !r[0]) continue; // Skip empty rows
+          if (!r || r.length === 0) continue;
+          const idVal = idIdx !== -1 ? r[idIdx] : '';
+          if (!idVal) continue;
           remoteDataParsed.push({
-            id: r[0] || '',
-            sku: r[1] || '',
-            name: r[2] || '',
-            brand: r[3] || '',
-            cat: r[4] || 'FIL',
-            subcat: r[5] || '',
-            type: r[6] || '',
-            colour: r[7] || '',
-            qty: Number(r[8]) || 0,
-            lowStock: Number(r[9]) || 2,
-            diameter: r[10] || '',
-            weight: r[11] || '',
-            printTemp: r[12] || '',
-            bedTemp: r[13] || '',
-            cost: Number(r[14]) || 0,
-            location: r[15] || '',
-            supplier: r[16] || '',
-            notes: r[17] || '',
-            unitMetric: r[18] || 'ea',
-            metricCapacity: Number(r[19]) || 1
+            id: idVal,
+            sku: skuIdx !== -1 ? r[skuIdx] : '',
+            name: nameIdx !== -1 ? r[nameIdx] : '',
+            brand: brandIdx !== -1 ? r[brandIdx] : '',
+            cat: catIdx !== -1 ? r[catIdx] : 'FIL',
+            subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
+            type: typeIdx !== -1 ? r[typeIdx] : '',
+            colour: colourIdx !== -1 ? r[colourIdx] : '',
+            qty: qtyIdx !== -1 ? (Number(r[qtyIdx]) || 0) : 0,
+            lowStock: lowStockIdx !== -1 ? (Number(r[lowStockIdx]) || 2) : 2,
+            diameter: diameterIdx !== -1 ? r[diameterIdx] : '',
+            weight: weightIdx !== -1 ? r[weightIdx] : '',
+            printTemp: printTempIdx !== -1 ? r[printTempIdx] : '',
+            bedTemp: bedTempIdx !== -1 ? r[bedTempIdx] : '',
+            cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
+            location: locationIdx !== -1 ? r[locationIdx] : '',
+            supplier: supplierIdx !== -1 ? r[supplierIdx] : '',
+            notes: notesIdx !== -1 ? r[notesIdx] : '',
+            unitMetric: unitMetricIdx !== -1 ? r[unitMetricIdx] : 'ea',
+            metricCapacity: metricCapacityIdx !== -1 ? (Number(r[metricCapacityIdx]) || 1) : 1,
+            photo: photoIdx !== -1 ? r[photoIdx] : ''
           });
         }
         
@@ -431,25 +494,49 @@ function renderInventoryTable(items) {
 
   const metricLabel = { g: 'g', m: 'm', sh: 'sh', ea: 'ea' };
 
+  // Read SKU catalog to look up up-to-date metadata dynamically (SSOT resolution)
+  let skuCatalog = window.__skuCatalogCache || [];
+
   tbody.innerHTML = items.map(item => {
+    // Resolve metadata dynamically from master SKU catalog if possible
+    const resolvedSku = skuCatalog.find(s => s.sku === item.sku);
+    const resolvedName = resolvedSku ? resolvedSku.name : item.name;
+    const resolvedBrand = resolvedSku ? resolvedSku.brand : item.brand;
+    const resolvedCat = resolvedSku ? resolvedSku.cat : item.cat;
+    const resolvedSubcat = resolvedSku ? resolvedSku.subcat : item.subcat;
+
     const isLow = item.qty <= item.lowStock;
     const badgeClass = isLow ? 'badge-red' : 'badge-green';
     const badgeText = isLow ? `Low Stock (${item.qty})` : `In Stock (${item.qty})`;
     
-    // Cost calculations
-    const repCost = Number(item.cost || 0);
+    // Cost calculations - strictly referencing master SKU cost
+    const repCost = resolvedSku ? Number(resolvedSku.cost || 0) : Number(item.cost || 0);
     const capacity = Number(item.metricCapacity || 1);
     const unitCost = repCost / capacity;
+
+    const imageLink = item.photo || (resolvedSku ? resolvedSku.photo : '');
+    var photoCell = '';
+    if (imageLink) {
+      var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(imageLink) : imageLink;
+      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${escapeHtml(imageLink)}')">`;
+    } else {
+      photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
+    }
 
     return `
       <tr>
         <td>
-          <strong style="color: var(--text);">${escapeHtml(item.name)}</strong><br>
-          <small style="color: var(--muted); font-family: monospace;">${escapeHtml(item.sku || 'No SKU')}</small>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${photoCell}
+            <div>
+              <strong style="color: var(--text);">${escapeHtml(resolvedName)}</strong><br>
+              <small style="color: var(--muted); font-family: monospace;">${escapeHtml(item.sku || 'No SKU')}</small>
+            </div>
+          </div>
         </td>
-        <td><span class="badge badge-accent">${escapeHtml(item.cat)}</span></td>
+        <td><span class="badge badge-accent">${escapeHtml(resolvedCat)}</span></td>
         <td>
-          ${escapeHtml(item.brand ? item.brand + ' ' : '')}${escapeHtml(item.type || '')}
+          ${escapeHtml(resolvedBrand ? resolvedBrand + ' ' : '')}${escapeHtml(item.type || '')}
           ${item.colour ? `<br><span class="tag">${escapeHtml(item.colour)}</span>` : ''}
           <div style="font-size: 11px; color: var(--muted); margin-top: 4px;">Metric: 1 pack = ${capacity}${metricLabel[item.unitMetric || 'ea']}</div>
         </td>
@@ -556,6 +643,7 @@ async function prepareInventoryForm(id = null) {
       document.getElementById('inv-form-type').value = item.type;
       document.getElementById('inv-form-colour').value = item.colour;
       document.getElementById('inv-form-location').value = item.location;
+      document.getElementById('inv-form-photo').value = item.photo || '';
       document.getElementById('inv-form-diameter').value = item.diameter;
       document.getElementById('inv-form-weight').value = item.weight;
       document.getElementById('inv-form-printtemp').value = item.printTemp;
@@ -590,7 +678,15 @@ function clearInventoryForm() {
   document.getElementById('inv-form-title').textContent = 'Add Inventory Item';
   document.getElementById('inv-form-cost-per-unit-preview').textContent = 'Cost per Metric Unit: $0.00';
   document.getElementById('inv-cancel-btn').style.display = 'none';
-  onInventoryMetricChange();
+
+  const inlineToggle = document.getElementById('inv-toggle-inline-sku');
+  if (inlineToggle) {
+    inlineToggle.checked = false;
+    toggleInlineSkuFields();
+  }
+
+  // Reload the form selections with the newly created SKU if any
+  prepareInventoryForm(null);
 }
 
 function onInventorySkuChange() {
@@ -667,11 +763,61 @@ async function saveInventoryItemForm(e) {
   e.preventDefault();
 
   const id = document.getElementById('inv-form-id').value || 'inv_' + Date.now();
-  const sku = document.getElementById('inv-form-sku').value;
-  const name = document.getElementById('inv-form-name').value;
-  const brand = document.getElementById('inv-form-brand').value;
-  const cat = document.getElementById('inv-form-cat').value;
-  const subcat = document.getElementById('inv-form-subcat').value;
+
+  let sku = document.getElementById('inv-form-sku').value;
+  let name = document.getElementById('inv-form-name').value;
+  let brand = document.getElementById('inv-form-brand').value;
+  let cat = document.getElementById('inv-form-cat').value;
+  let subcat = document.getElementById('inv-form-subcat').value;
+
+  const inlineToggle = document.getElementById('inv-toggle-inline-sku');
+  const cost = Number(document.getElementById('inv-form-cost').value) || 0;
+
+  if (inlineToggle && inlineToggle.checked) {
+    // We are creating a SKU inline!
+    sku = document.getElementById('inv-inline-sku-code').value.trim();
+    name = document.getElementById('inv-inline-sku-name').value.trim();
+    cat = document.getElementById('inv-inline-sku-cat').value;
+    subcat = document.getElementById('inv-inline-sku-subcat').value.trim();
+    brand = document.getElementById('inv-inline-sku-brand').value.trim();
+
+    if (!sku || !name) {
+      alert('SKU Code and Item Name are required to create an inline SKU.');
+      return;
+    }
+
+    // Save to sku.json database
+    let skus = [];
+    try { skus = await window.makerAPI.readData('sku.json') || []; } catch(err){}
+    const existing = skus.find(s => s.sku.toLowerCase() === sku.toLowerCase());
+    if (!existing) {
+      const skuId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const newSkuObj = {
+        id: skuId,
+        sku: sku,
+        name: name,
+        cat: cat,
+        subcat: subcat,
+        brand: brand,
+        cost: cost,
+        price: 0,
+        cogs: 0,
+        retail: 0,
+        status: 'Active',
+        notes: 'Created inline from Inventory Form',
+        classification: 'Raw Component / Material (BOM Input)'
+      };
+      skus.unshift(newSkuObj);
+      await window.makerAPI.writeData('sku.json', skus);
+
+      // Save row to Sheets tab
+      if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+        await window.MAKER_CONFIG.saveToDatabase('Sku', [
+          skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Inventory Form', 'Raw Component / Material (BOM Input)'
+        ]);
+      }
+    }
+  }
 
   const qty = Number(document.getElementById('inv-form-qty').value) || 0;
   const lowStock = Number(document.getElementById('inv-form-lowstock').value) || 0;
@@ -686,18 +832,64 @@ async function saveInventoryItemForm(e) {
   const printTemp = document.getElementById('inv-form-printtemp').value;
   const bedTemp = document.getElementById('inv-form-bedtemp').value;
 
-  const cost = Number(document.getElementById('inv-form-cost').value) || 0;
   const unitMetric = document.getElementById('inv-form-metric').value;
   const metricCapacity = Number(document.getElementById('inv-form-capacity').value) || 1;
   const notes = document.getElementById('inv-form-notes').value;
+  const photo = document.getElementById('inv-form-photo').value.trim();
 
   const itemObj = {
     id, sku, name, brand, cat, subcat, qty, lowStock, supplier,
     type, colour, location, diameter, weight, printTemp, bedTemp,
-    cost, unitMetric, metricCapacity, notes
+    cost, unitMetric, metricCapacity, notes, photo
   };
 
   if (!window.__inventoryCache) window.__inventoryCache = [];
+
+  // AVCO Weighted Average Cost Recalculation
+  try {
+    let skus = [];
+    if (window.makerAPI && window.makerAPI.readData) {
+      skus = await window.makerAPI.readData('sku.json') || [];
+    }
+    const skuItem = skus.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase());
+    if (skuItem) {
+      const existingIdx = window.__inventoryCache.findIndex(x => x.id === id);
+      const oldQty = existingIdx >= 0 ? Number(window.__inventoryCache[existingIdx].qty || 0) : 0;
+      const addedQty = qty - oldQty;
+
+      if (addedQty > 0) {
+        const otherLotsQty = window.__inventoryCache.reduce((sum, item) => {
+          if (item.id !== id && item.sku && item.sku.toLowerCase() === sku.toLowerCase()) {
+            return sum + Number(item.qty || 0);
+          }
+          return sum;
+        }, 0);
+        const currentTotalQty = otherLotsQty + oldQty;
+        const currentSkuCost = Number(skuItem.cost || 0);
+
+        if (currentTotalQty > 0 && currentSkuCost > 0) {
+          const totalValue = (currentTotalQty * currentSkuCost) + (addedQty * cost);
+          const newTotalQty = currentTotalQty + addedQty;
+          skuItem.cost = Number((totalValue / newTotalQty).toFixed(2));
+        } else {
+          skuItem.cost = cost;
+        }
+
+        await window.makerAPI.writeData('sku.json', skus);
+
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Sku', [
+            skuItem.id, skuItem.sku, skuItem.name, skuItem.cat || '', skuItem.subcat || '',
+            skuItem.brand || '', skuItem.cost, skuItem.price || 0, skuItem.cogs || 0, skuItem.retail || 0,
+            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || ''
+          ]);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('AVCO Cost Engine Error:', err);
+  }
+
   const idx = window.__inventoryCache.findIndex(x => x.id === id);
   if (idx >= 0) {
     window.__inventoryCache[idx] = itemObj;
@@ -715,7 +907,7 @@ async function saveInventoryItemForm(e) {
     const rowArray = [
       id, sku, name, brand, cat, subcat, type, colour, qty, lowStock,
       diameter, weight, printTemp, bedTemp, cost, location, supplier, notes,
-      unitMetric, metricCapacity
+      unitMetric, metricCapacity, photo
     ];
     await window.MAKER_CONFIG.saveToDatabase('Inventory', rowArray);
   }
@@ -723,6 +915,33 @@ async function saveInventoryItemForm(e) {
   clearInventoryForm();
   renderInventoryTable(window.__inventoryCache);
 }
+
+// Toggle visibility of fields for inline SKU creation
+window.toggleInlineSkuFields = function() {
+  const inlineToggle = document.getElementById('inv-toggle-inline-sku');
+  const inlineFields = document.getElementById('inv-inline-sku-fields');
+  const skuSelect = document.getElementById('inv-form-sku');
+  const readDetailsRow = document.getElementById('inv-form-read-details-row');
+  const readCatsRow = document.getElementById('inv-form-read-cats-row');
+
+  if (inlineToggle && inlineToggle.checked) {
+    if (inlineFields) inlineFields.style.display = 'block';
+    if (skuSelect) {
+      skuSelect.removeAttribute('required');
+      skuSelect.disabled = true;
+    }
+    if (readDetailsRow) readDetailsRow.style.display = 'none';
+    if (readCatsRow) readCatsRow.style.display = 'none';
+  } else {
+    if (inlineFields) inlineFields.style.display = 'none';
+    if (skuSelect) {
+      skuSelect.setAttribute('required', 'true');
+      skuSelect.disabled = false;
+    }
+    if (readDetailsRow) readDetailsRow.style.display = 'flex';
+    if (readCatsRow) readCatsRow.style.display = 'flex';
+  }
+};
 
 function editInventoryItem(id) {
   prepareInventoryForm(id);

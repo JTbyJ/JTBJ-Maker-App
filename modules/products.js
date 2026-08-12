@@ -32,7 +32,9 @@ window.__productsCache = null;
           #panel-products button,
           #panel-products select,
           #ai-seo-modal,
-          #ai-seo-modal * {
+          #ai-seo-modal *,
+          #prod-inline-sku-modal,
+          #prod-inline-sku-modal * {
             pointer-events: auto !important;
             user-select: text !important;
             -webkit-user-select: text !important;
@@ -40,14 +42,18 @@ window.__productsCache = null;
             z-index: 99999 !important;
           }
         </style>
-        <div class="page-header">
-          <h2>Product Catalog &amp; BOM Builder</h2>
-          <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+          <div>
+            <h2>Product Catalog &amp; BOM Builder</h2>
+            <p>Define finished products, establish Bills of Materials (BOM) linked to inventory, and calculate exact COGS and profit margins.</p>
+          </div>
+          <button class="btn btn-ghost" id="prod-sync-btn">🔄 Sync</button>
         </div>
 
         <div style="display:flex;gap:10px;margin-bottom:14px">
           <button class="btn btn-primary" id="prod-tab-list-btn">Product Directory</button>
           <button class="btn btn-ghost" id="prod-tab-form-btn">Add New Product</button>
+          <button class="btn btn-ghost" id="prod-tab-analytics-btn">📈 Cost Impact Analytics</button>
         </div>
 
         <!-- LIST TAB -->
@@ -81,6 +87,9 @@ window.__productsCache = null;
               </div>
               <div class="field" style="margin-bottom:10px">
                 <label>SKU</label><input type="text" id="p-sku" required placeholder="e.g. FIN-TUM-GLIT">
+              </div>
+              <div class="field" style="margin-bottom:10px">
+                <label>Photo URL / Image Link</label><input type="text" id="p-photo" placeholder="e.g. https://imgur.com/example.png">
               </div>
               <div style="display:flex;gap:10px;margin-bottom:10px">
                 <div class="field" style="flex:1">
@@ -125,11 +134,17 @@ window.__productsCache = null;
               
               <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
                 <div class="field" style="flex:1">
-                  <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Inventory Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="inventory" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <label style="margin:0">Inventory Item</label>
+                    <button type="button" class="btn btn-ghost btn-sm" id="prod-btn-inline-sku" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">⚡ New Inline SKU</button>
+                  </div>
                   <select id="p-bom-item"><option value="">Select Raw Item...</option></select>
                 </div>
                 <div class="field" style="width:110px">
                   <label id="p-bom-qty-label">Qty Required</label><input type="number" id="p-bom-qty" step="any" value="1">
+                </div>
+                <div class="field" style="width:80px">
+                  <label>Wastage %</label><input type="number" id="p-bom-waste" min="0" value="0" step="any">
                 </div>
                 <button type="button" class="btn btn-secondary" id="p-bom-add-btn">Add</button>
               </div>
@@ -153,6 +168,49 @@ window.__productsCache = null;
               </div>
             </div>
           </form>
+        </div>
+
+        <!-- ANALYTICS TAB -->
+        <div id="prod-tab-analytics" style="display:none">
+          <div class="card" style="margin-bottom: 20px;">
+            <h3 style="color:var(--teal); margin-bottom:8px;">📊 Dynamic Cost Shift Matrix</h3>
+            <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">Simulate price fluctuations of raw materials and immediately inspect profit margins and COGS shifts across your product catalog.</p>
+
+            <div style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px; background:rgba(0,0,0,0.15); padding:16px; border-radius:10px; border:1px solid var(--border);">
+              <div class="field" style="width:250px;">
+                <label>Select Raw Material / SKU</label>
+                <select id="an-material-select" style="width:100%;"></select>
+              </div>
+              <div class="field" style="width:140px;">
+                <label>Simulated Price Shift</label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" id="an-shift-percent" value="10" step="any" style="width:80px;">
+                  <span style="font-weight:700; color:var(--gold);">%</span>
+                </div>
+              </div>
+              <button type="button" class="btn btn-teal" id="an-simulate-btn">Simulate Impact</button>
+              <button type="button" class="btn btn-ghost" id="an-reset-btn">Reset Simulation</button>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product Name</th>
+                    <th>Current COGS</th>
+                    <th>Simulated COGS</th>
+                    <th>COGS Shift</th>
+                    <th>Current Margin</th>
+                    <th>Simulated Margin</th>
+                    <th>Margin Shift</th>
+                  </tr>
+                </thead>
+                <tbody id="an-matrix-tbody">
+                  <tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Select a material above to simulate pricing impacts.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <!-- AI SEO GENERATOR MODAL -->
@@ -180,6 +238,50 @@ window.__productsCache = null;
 
             <div style="display:flex; justify-content:flex-end; margin-top:8px;">
               <button class="btn btn-primary" id="btn-close-ai-seo">Done</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PROD INLINE SKU MODAL -->
+        <div id="prod-inline-sku-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
+          <div class="card" style="background:var(--surface); width:480px; border:1px solid var(--border); border-radius:var(--radius); padding:24px; position:relative; box-shadow:0 10px 40px rgba(0,0,0,0.6); display:flex; flex-direction:column; gap:16px;">
+            <h3 style="margin-bottom:4px; font-size:16px; font-weight:700; color:var(--accent);">⚡ Fast Create New SKU Inline</h3>
+            <div class="field">
+              <label>SKU Code</label>
+              <input type="text" id="p-inline-sku-code" placeholder="e.g. FIL-PLA-CRE-005" style="font-family:monospace; font-weight:700;">
+            </div>
+            <div class="field">
+              <label>Item Name</label>
+              <input type="text" id="p-inline-sku-name" placeholder="e.g. Creality Black PLA">
+            </div>
+            <div class="input-row">
+              <div class="field" style="flex:1;">
+                <label>Category</label>
+                <select id="p-inline-sku-cat">
+                  <option value="FIL">Filament (FIL)</option>
+                  <option value="MAT">Raw Materials (MAT)</option>
+                  <option value="BLK">Blanks (BLK)</option>
+                  <option value="SUB">Sublimation Supplies (SUB)</option>
+                </select>
+              </div>
+              <div class="field" style="flex:1;">
+                <label>Subcategory Code</label>
+                <input type="text" id="p-inline-sku-subcat" placeholder="e.g. PLA">
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="field" style="flex:1;">
+                <label>Brand / Manufacturer</label>
+                <input type="text" id="p-inline-sku-brand" placeholder="e.g. Creality">
+              </div>
+              <div class="field" style="flex:1;">
+                <label>Cost ($)</label>
+                <input type="number" id="p-inline-sku-cost" step="0.01" value="0.00">
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button type="button" class="btn btn-ghost" id="p-inline-sku-cancel">Cancel</button>
+              <button type="button" class="btn btn-primary" id="p-inline-sku-save">Create &amp; Add SKU</button>
             </div>
           </div>
         </div>
@@ -213,12 +315,85 @@ window.__productsCache = null;
       clearBuildForm();
       switchTab('form');
     });
+    g('prod-tab-analytics-btn').addEventListener('click',function(){switchTab('analytics');});
+    g('an-simulate-btn').addEventListener('click', runSimulation);
+    g('an-reset-btn').addEventListener('click', function() {
+      g('an-material-select').value = '';
+      g('an-shift-percent').value = '10';
+      g('an-matrix-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Select a material above to simulate pricing impacts.</td></tr>';
+    });
+
+    // Inline SKU Modal controllers
+    g('prod-btn-inline-sku').addEventListener('click', function(e) {
+      e.preventDefault();
+      g('p-inline-sku-code').value = '';
+      g('p-inline-sku-name').value = '';
+      g('p-inline-sku-subcat').value = '';
+      g('p-inline-sku-brand').value = '';
+      g('p-inline-sku-cost').value = '0.00';
+      g('prod-inline-sku-modal').style.display = 'flex';
+    });
+
+    g('p-inline-sku-cancel').addEventListener('click', function() {
+      g('prod-inline-sku-modal').style.display = 'none';
+    });
+
+    g('p-inline-sku-save').addEventListener('click', async function() {
+      var sku = g('p-inline-sku-code').value.trim();
+      var name = g('p-inline-sku-name').value.trim();
+      if (!sku || !name) {
+        alert('SKU Code and Item Name are required to create a SKU.');
+        return;
+      }
+      var cat = g('p-inline-sku-cat').value;
+      var subcat = g('p-inline-sku-subcat').value.trim();
+      var brand = g('p-inline-sku-brand').value.trim();
+      var cost = Number(g('p-inline-sku-cost').value) || 0;
+
+      // 1. Write SKU to Master SKU Cache
+      let skus = [];
+      try { skus = await window.makerAPI.readData('sku.json') || []; } catch(err){}
+      const existing = skus.find(s => s.sku.toLowerCase() === sku.toLowerCase());
+      if (!existing) {
+        const skuId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const newSku = {
+          id: skuId,
+          sku: sku,
+          name: name,
+          cat: cat,
+          subcat: subcat,
+          brand: brand,
+          cost: cost,
+          price: 0,
+          cogs: 0,
+          retail: 0,
+          status: 'Active',
+          notes: 'Created inline from Product Catalog spec form',
+          classification: 'Raw Component / Material (BOM Input)'
+        };
+        skus.unshift(newSku);
+        await window.makerAPI.writeData('sku.json', skus);
+
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Sku', [
+            skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Product Catalog spec', 'Raw Component / Material (BOM Input)'
+          ]);
+        }
+      }
+
+      // 2. Refresh lists and close modal
+      await loadInventory();
+      g('prod-inline-sku-modal').style.display = 'none';
+
+      // 3. Auto-select the newly created SKU in the BOM picker
+      g('p-bom-item').value = sku;
+    });
 
     // Qty Required Dynamic Metric Label on Selected Item change
     g('p-bom-item').addEventListener('change', function() {
-      var id = g('p-bom-item').value;
+      var identifier = g('p-bom-item').value;
       var label = g('p-bom-qty-label');
-      var inv = invList.find(function(x){return x.id === id;});
+      var inv = invList.find(function(x){return x.sku === identifier || x.id === identifier;});
       if (inv && label) {
         label.textContent = 'Qty (' + (inv.unitMetric || 'ea') + ')';
       } else if (label) {
@@ -282,28 +457,39 @@ window.__productsCache = null;
     g('p-bom-add-btn').addEventListener('click',function(){
       var id=g('p-bom-item').value;
       var qty=parseFloat(g('p-bom-qty').value)||0;
+      var waste=parseFloat(g('p-bom-waste').value)||0;
       if(!id||qty<=0)return;
-      var inv=invList.find(function(x){return x.id===id;});
+      var inv=invList.find(function(x){return x.sku === id || x.id===id;});
       if(inv){
         var cap = Number(inv.metricCapacity || 1);
         const cost = Number(inv.cost || 0);
         const calculatedUnitCost = cost / cap;
+        const bomIdentifier = inv.sku || inv.id;
 
-        var existing=bomList.find(function(x){return x.itemId===id;});
+        var existing=bomList.find(function(x){return x.itemId===bomIdentifier;});
         if(existing){
           existing.qty+=qty;
+          existing.waste=waste; // Override or keep latest waste %
         }else{
           bomList.push({
-            itemId:id,
+            itemId:bomIdentifier,
             name:inv.name,
             qty:qty,
             unitMetric: inv.unitMetric || 'ea',
-            unitCost: calculatedUnitCost
+            unitCost: calculatedUnitCost,
+            waste: waste
           });
         }
         g('p-bom-qty').value='1';
+        g('p-bom-waste').value='0';
         renderBOM();
       }
+    });
+
+    g('prod-sync-btn').addEventListener('click', async function() {
+      g('prod-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Syncing products with Google Sheets...</td></tr>';
+      window.__productsCache = null;
+      await load();
     });
 
     g('prod-form').addEventListener('submit',async function(e){
@@ -325,6 +511,8 @@ window.__productsCache = null;
       var labCost=labHrs*labRate;
       var cogs=matCost+labCost+etsyFee;
       var margin=salePrice>0?((salePrice-cogs)/salePrice)*100:0;
+
+      var photo=g('p-photo').value.trim();
 
       var obj={
         id:editId||'prod_'+Date.now(),
@@ -349,9 +537,11 @@ window.__productsCache = null;
             name:b.name,
             qty:b.qty,
             unitMetric:b.unitMetric || 'ea',
-            unitCost:b.unitCost
+            unitCost:b.unitCost,
+            waste: b.waste || 0
           };
-        })
+        }),
+        photo:photo
       };
       if(editId){var idx=products.findIndex(function(x){return x.id===editId;});if(idx>=0)products[idx]=obj;}
       else products.unshift(obj);
@@ -364,7 +554,7 @@ window.__productsCache = null;
             JSON.stringify(obj.platforms), obj.salePrice, obj.etsyFee,
             obj.description, obj.notes, obj.labourHrs, obj.labourRate,
             obj.labourCost, obj.materialCost, obj.cogs, obj.margin,
-            JSON.stringify(obj.bom)
+            JSON.stringify(obj.bom), obj.photo
           ]);
         }
       } catch (err) {
@@ -382,28 +572,154 @@ window.__productsCache = null;
   }
 
   function switchTab(t){
-    if(t==='list'){
-      g('prod-tab-list').style.display='block';g('prod-tab-form').style.display='none';
-      g('prod-tab-list-btn').className='btn btn-primary';g('prod-tab-form-btn').className='btn btn-ghost';
-    }else{
-      g('prod-tab-list').style.display='none';g('prod-tab-form').style.display='block';
-      g('prod-tab-list-btn').className='btn btn-ghost';g('prod-tab-form-btn').className='btn btn-primary';
+    g('prod-tab-list').style.display = t === 'list' ? 'block' : 'none';
+    g('prod-tab-form').style.display = t === 'form' ? 'block' : 'none';
+    g('prod-tab-analytics').style.display = t === 'analytics' ? 'block' : 'none';
+
+    g('prod-tab-list-btn').className = t === 'list' ? 'btn btn-primary' : 'btn btn-ghost';
+    g('prod-tab-form-btn').className = t === 'form' ? 'btn btn-primary' : 'btn btn-ghost';
+    g('prod-tab-analytics-btn').className = t === 'analytics' ? 'btn btn-primary' : 'btn btn-ghost';
+
+    if (t === 'analytics') {
+      populateAnalyticsMaterials();
     }
+  }
+
+  async function populateAnalyticsMaterials() {
+    let skus = [];
+    try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+    const select = g('an-material-select');
+    if (select) {
+      select.innerHTML = '<option value="">-- Select Master SKU --</option>';
+      skus.forEach(s => {
+        select.innerHTML += `<option value="${s.sku}">${s.sku} - ${s.name} ($${Number(s.cost || 0).toFixed(2)})</option>`;
+      });
+    }
+  }
+
+  function runSimulation() {
+    const targetSku = g('an-material-select').value;
+    const shiftPercent = parseFloat(g('an-shift-percent').value) || 0;
+    const tbody = g('an-matrix-tbody');
+    if (!tbody) return;
+
+    if (!targetSku) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Please select a master SKU above.</td></tr>';
+      return;
+    }
+
+    const currentInventory = window.__inventoryCache || [];
+    const skuCatalog = window.__skuCatalogCache || [];
+
+    let affectedProducts = [];
+
+    products.forEach(p => {
+      let usesMaterial = false;
+      let currentMatCost = 0;
+      let simulatedMatCost = 0;
+
+      if (p.bom && Array.isArray(p.bom)) {
+        p.bom.forEach(bomItem => {
+          const invItem = currentInventory.find(x => x.id === bomItem.itemId || x.sku === bomItem.itemId);
+          let uCost = 0;
+          if (invItem) {
+            uCost = Number(invItem.cost || 0) / Number(invItem.metricCapacity || 1);
+          } else {
+            const masterSku = skuCatalog.find(s => s.sku === bomItem.itemId);
+            uCost = masterSku ? Number(masterSku.cost || 0) : Number(bomItem.unitCost || 0);
+          }
+
+          const wastePct = Number(bomItem.waste || 0);
+          const effectiveQty = bomItem.qty * (1 + wastePct / 100);
+
+          currentMatCost += effectiveQty * uCost;
+
+          if (bomItem.itemId === targetSku) {
+            usesMaterial = true;
+            const simUnitCost = uCost * (1 + shiftPercent / 100);
+            simulatedMatCost += effectiveQty * simUnitCost;
+          } else {
+            simulatedMatCost += effectiveQty * uCost;
+          }
+        });
+      }
+
+      if (usesMaterial) {
+        const curCogs = currentMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
+        const simCogs = simulatedMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
+
+        const curMargin = p.salePrice > 0 ? ((p.salePrice - curCogs) / p.salePrice) * 100 : 0;
+        const simMargin = p.salePrice > 0 ? ((p.salePrice - simCogs) / p.salePrice) * 100 : 0;
+
+        affectedProducts.push({
+          name: p.name,
+          sku: p.sku,
+          curCogs: curCogs,
+          simCogs: simCogs,
+          cogsShift: simCogs - curCogs,
+          curMargin: curMargin,
+          simMargin: simMargin,
+          marginShift: simMargin - curMargin
+        });
+      }
+    });
+
+    if (affectedProducts.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">No products currently utilize this master SKU in their BOM.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = affectedProducts.map(p => {
+      const shiftColor = p.cogsShift > 0 ? 'var(--red)' : (p.cogsShift < 0 ? 'var(--green)' : 'var(--muted)');
+      const marginColor = p.marginShift < 0 ? 'var(--red)' : (p.marginShift > 0 ? 'var(--green)' : 'var(--muted)');
+      return `
+        <tr>
+          <td style="font-weight:700;">${p.name} <br><small style="color:var(--muted);">${p.sku}</small></td>
+          <td style="font-family:monospace;">$${p.curCogs.toFixed(2)}</td>
+          <td style="font-family:monospace; font-weight:700;">$${p.simCogs.toFixed(2)}</td>
+          <td style="font-family:monospace; font-weight:700; color:${shiftColor};">${p.cogsShift >= 0 ? '+' : ''}$${p.cogsShift.toFixed(2)}</td>
+          <td style="font-weight:600;">${p.curMargin.toFixed(1)}%</td>
+          <td style="font-weight:700;">${p.simMargin.toFixed(1)}%</td>
+          <td style="font-weight:700; color:${marginColor};">${p.marginShift >= 0 ? '+' : ''}${p.marginShift.toFixed(1)}%</td>
+        </tr>
+      `;
+    }).join('');
   }
 
   async function loadInventory(){
     try{
+      let skuCatalog = [];
+      try { skuCatalog = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+
       if (window.__inventoryCache && window.__inventoryCache.length > 0) {
         invList = window.__inventoryCache;
       } else {
         invList=await window.makerAPI.readData('inventory.json')||[];
         window.__inventoryCache = invList;
       }
+
+      // Ensure SKU catalog items not present in inventory can still be built (SSOT)
+      skuCatalog.forEach(s => {
+        const matches = invList.some(inv => inv.sku === s.sku);
+        if (!matches) {
+          invList.push({
+            id: s.sku,
+            sku: s.sku,
+            name: s.name,
+            brand: s.brand,
+            cat: s.cat,
+            subcat: s.subcat,
+            cost: s.cost,
+            unitMetric: 'ea',
+            metricCapacity: 1
+          });
+        }
+      });
     }catch(err){invList=[];}
     var sel=g('p-bom-item');if(!sel)return;
     sel.innerHTML='<option value="">Select Raw Item...</option>';
     invList.forEach(function(i){
-      var o=document.createElement('option');o.value=i.id;o.textContent=i.name+' ('+i.sku+')';sel.appendChild(o);
+      var o=document.createElement('option');o.value=i.sku || i.id;o.textContent=i.name+' ('+i.sku+')';sel.appendChild(o);
     });
   }
 
@@ -426,37 +742,66 @@ window.__productsCache = null;
       if (fetchFunc) {
         const remoteData = await fetchFunc('Products');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          // Robust header row check including SKU / ID column variations
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id' || remoteData[0][0] === 'SKU' || remoteData[0][0] === 'sku')) ? 1 : 0;
-          products = remoteData.slice(startIndex).map(row => {
-            let platforms = [];
-            try { platforms = JSON.parse(row[5] || '[]'); } catch(e) {
-              platforms = row[5] ? row[5].split(',') : [];
-            }
-            let bom = [];
-            try { bom = JSON.parse(row[16] || '[]'); } catch(e) {}
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'product_id' || h.includes('id'));
+          const nameIdx = header.findIndex(h => h === 'name' || h === 'product name' || h.includes('name'));
+          const catIdx = header.findIndex(h => h === 'category' || h.includes('cat'));
+          const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
+          const statIdx = header.findIndex(h => h === 'status' || h.includes('status'));
+          const platIdx = header.findIndex(h => h === 'platforms' || h === 'sales platforms' || h.includes('plat'));
+          const priceIdx = header.findIndex(h => h === 'saleprice' || h === 'sale price' || h === 'price' || h.includes('price') || h.includes('retail'));
+          const feeIdx = header.findIndex(h => h === 'etsyfee' || h === 'etsy fee' || h.includes('fee'));
+          const descIdx = header.findIndex(h => h === 'description' || h.includes('desc'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('mfg'));
+          const hrsIdx = header.findIndex(h => h === 'labourhrs' || h === 'labour hours' || h === 'labor hours' || h.includes('hrs') || h.includes('hours'));
+          const rateIdx = header.findIndex(h => h === 'labourrate' || h === 'hourly rate' || h.includes('rate'));
+          const labCostIdx = header.findIndex(h => h === 'labourcost' || h === 'labour cost' || h === 'labor cost' || h.includes('labourcost') || h.includes('laborcost'));
+          const matCostIdx = header.findIndex(h => h === 'materialcost' || h === 'material cost' || h.includes('materialcost'));
+          const cogsIdx = header.findIndex(h => h === 'cogs' || h.includes('cogs'));
+          const marginIdx = header.findIndex(h => h === 'margin' || h.includes('margin'));
+          const bomIdx = header.findIndex(h => h === 'bom' || h === 'bill of materials' || h.includes('bom'));
+          const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
-            return {
-              id: row[0] || '',
-              name: row[1] || '',
-              category: row[2] || '',
-              sku: row[3] || '',
-              status: row[4] || 'Active',
+          const parsedProds = [];
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+
+            let platforms = [];
+            const rawPlat = platIdx !== -1 ? r[platIdx] : '';
+            try { platforms = JSON.parse(rawPlat || '[]'); } catch(e) {
+              platforms = rawPlat ? rawPlat.split(',') : [];
+            }
+
+            let bom = [];
+            const rawBom = bomIdx !== -1 ? r[bomIdx] : '';
+            try { bom = JSON.parse(rawBom || '[]'); } catch(e) {}
+
+            parsedProds.push({
+              id: idVal,
+              name: nameIdx !== -1 ? r[nameIdx] : '',
+              category: catIdx !== -1 ? r[catIdx] : '',
+              sku: skuIdx !== -1 ? r[skuIdx] : '',
+              status: statIdx !== -1 ? r[statIdx] : 'Active',
               platforms: platforms,
-              salePrice: parseFloat(row[6]) || 0,
-              etsyFee: parseFloat(row[7]) || 0,
-              description: row[8] || '',
-              notes: row[9] || '',
-              labourHrs: parseFloat(row[10]) || 0,
-              labourRate: parseFloat(row[11]) || 20,
-              labourCost: parseFloat(row[12]) || 0,
-              materialCost: parseFloat(row[13]) || 0,
-              cogs: parseFloat(row[14]) || 0,
-              margin: parseFloat(row[15]) || 0,
-              bom: bom
-            };
-          }).filter(x => x.id && x.status !== 'DELETED');
-          
+              salePrice: priceIdx !== -1 ? (parseFloat(r[priceIdx]) || 0) : 0,
+              etsyFee: feeIdx !== -1 ? (parseFloat(r[feeIdx]) || 0) : 0,
+              description: descIdx !== -1 ? r[descIdx] : '',
+              notes: notesIdx !== -1 ? r[notesIdx] : '',
+              labourHrs: hrsIdx !== -1 ? (parseFloat(r[hrsIdx]) || 0) : 0,
+              labourRate: rateIdx !== -1 ? (parseFloat(r[rateIdx]) || 20) : 20,
+              labourCost: labCostIdx !== -1 ? (parseFloat(r[labCostIdx]) || 0) : 0,
+              materialCost: matCostIdx !== -1 ? (parseFloat(r[matCostIdx]) || 0) : 0,
+              cogs: cogsIdx !== -1 ? (parseFloat(r[cogsIdx]) || 0) : 0,
+              margin: marginIdx !== -1 ? (parseFloat(r[marginIdx]) || 0) : 0,
+              bom: bom,
+              photo: photoIdx !== -1 ? r[photoIdx] : ''
+            });
+          }
+
+          products = parsedProds.filter(x => x.id && x.status !== 'DELETED');
           window.__productsCache = products;
           await window.makerAPI.writeData(FILE, products);
           renderList();
@@ -482,17 +827,59 @@ window.__productsCache = null;
     var tbody=g('prod-tbody');if(!tbody)return;
     tbody.innerHTML='';
 
+    // Read current live cache from inventory to calculate up-to-date COGS metrics
+    var currentInventory = window.__inventoryCache || [];
+
     products.forEach(function(p){
       if(q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q))return;
-      var tr=document.createElement('tr');
-      var profit=p.salePrice-p.cogs;
-      tr.innerHTML=`
-        <td><div style="font-weight:700">${p.name}</div><div style="font-size:11px;color:var(--muted)">${p.category} • ${p.platforms.join(', ')}</div></td>
+
+      // Recalculate materials dynamically based on live inventory per-unit cost
+      var dynamicMatCost = 0;
+      if (p.bom && Array.isArray(p.bom)) {
+        p.bom.forEach(function(bomItem) {
+          const invItem = currentInventory.find(x => x.sku === bomItem.itemId || x.id === bomItem.itemId);
+          if (invItem) {
+            const cost = Number(invItem.cost || 0);
+            const capacity = Number(invItem.metricCapacity || 1);
+            const liveUnitCost = cost / capacity;
+            dynamicMatCost += bomItem.qty * liveUnitCost;
+          } else {
+            // Fallback to SKU master catalog cost if inventory item doesn't exist/out of stock
+            const masterSku = (window.__skuCatalogCache || []).find(s => s.sku === bomItem.itemId);
+            const baseCost = masterSku ? Number(masterSku.cost || 0) : Number(bomItem.unitCost || 0);
+            dynamicMatCost += bomItem.qty * baseCost;
+          }
+        });
+      }
+
+      var dynamicCogs = dynamicMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
+      var dynamicMargin = p.salePrice > 0 ? ((p.salePrice - dynamicCogs) / p.salePrice) * 100 : 0;
+      var profit = p.salePrice - dynamicCogs;
+
+      var photoCell = '';
+      if (p.photo) {
+        var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(p.photo) : p.photo;
+        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${p.photo}')">`;
+      } else {
+        photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
+      }
+
+      var tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${photoCell}
+            <div>
+              <div style="font-weight:700">${p.name}</div>
+              <div style="font-size:11px;color:var(--muted)">${p.category} • ${p.platforms.join(', ')}</div>
+            </div>
+          </div>
+        </td>
         <td><span class="tag">${p.sku}</span></td>
-        <td><div>Lab: $${p.labourCost.toFixed(2)}</div><div style="font-size:11px;color:var(--muted)">Mat: $${p.materialCost.toFixed(2)}</div></td>
-        <td style="font-weight:600">$${p.cogs.toFixed(2)}</td>
+        <td><div>Lab: $${(p.labourCost || 0).toFixed(2)}</div><div style="font-size:11px;color:var(--muted)">Mat: $${dynamicMatCost.toFixed(2)}</div></td>
+        <td style="font-weight:600">$${dynamicCogs.toFixed(2)}</td>
         <td style="font-weight:600">$${p.salePrice.toFixed(2)}</td>
-        <td><span class="badge ${profit>0?'badge-green':'badge-red'}">$${profit.toFixed(2)} (${p.margin.toFixed(0)}%)</span></td>
+        <td><span class="badge ${profit>0?'badge-green':'badge-red'}">$${profit.toFixed(2)} (${dynamicMargin.toFixed(0)}%)</span></td>
         <td>
           <button class="btn btn-ghost btn-sm prode" data-id="${p.id}">✎</button>
           <button class="btn btn-danger btn-sm prodd" data-id="${p.id}">🗑</button>
@@ -510,13 +897,15 @@ window.__productsCache = null;
           g('p-platforms').value=JSON.stringify(pItem.platforms);g('p-price').value=pItem.salePrice;g('p-fee').value=pItem.etsyFee;
           g('p-desc').value=pItem.description;g('p-notes').value=pItem.notes;
           g('p-lab-hrs').value=pItem.labourHrs;g('p-lab-rate').value=pItem.labourRate;
+          g('p-photo').value=pItem.photo || '';
           bomList=pItem.bom.map(function(x){
             return {
               itemId:x.itemId,
               name:x.name,
               qty:x.qty,
               unitMetric:x.unitMetric || 'ea',
-              unitCost:x.unitCost
+              unitCost:x.unitCost,
+              waste: x.waste || 0
             };
           });
           renderBOM();switchTab('form');
@@ -547,10 +936,14 @@ window.__productsCache = null;
     var tbody=g('p-bom-tbody');if(!tbody)return;
     tbody.innerHTML='';
     bomList.forEach(function(b,idx){
-      var total=b.qty*b.unitCost;
+      var wastePct = Number(b.waste || 0);
+      var effectiveQty = b.qty * (1 + wastePct / 100);
+      var total=effectiveQty*b.unitCost;
       var tr=document.createElement('tr');
       tr.innerHTML=`
-        <td>${b.name} (${b.unitMetric})</td><td>${b.qty}</td><td>$${b.unitCost.toFixed(3)}</td><td>$${total.toFixed(2)}</td>
+        <td>${b.name} (${b.unitMetric})${wastePct > 0 ? `<br><small style="color:var(--gold);">+${wastePct}% waste</small>` : ''}</td>
+        <td>${b.qty}${wastePct > 0 ? `<br><small style="color:var(--gold);">${effectiveQty.toFixed(2)} eff.</small>` : ''}</td>
+        <td>$${b.unitCost.toFixed(3)}</td><td>$${total.toFixed(2)}</td>
         <td><button type="button" class="btn btn-danger btn-sm bomr" style="padding:2px 6px" data-idx="${idx}">×</button></td>
       `;
       tbody.appendChild(tr);
@@ -564,7 +957,17 @@ window.__productsCache = null;
   }
 
   function recalcSummary(){
-    var matCost=0;bomList.forEach(function(b){matCost+=b.qty*b.unitCost;});
+    var matCost=0;
+    bomList.forEach(function(b){
+      let uCost = Number(b.unitCost || 0);
+      if (uCost === 0) {
+        const masterSku = (window.__skuCatalogCache || []).find(s => s.sku === b.itemId);
+        if (masterSku) {
+          uCost = Number(masterSku.cost || 0);
+        }
+      }
+      matCost += b.qty * uCost;
+    });
     var hrs=parseFloat(g('p-lab-hrs').value)||0;
     var rate=parseFloat(g('p-lab-rate').value)||0;
     var fee=parseFloat(g('p-fee').value)||0;
