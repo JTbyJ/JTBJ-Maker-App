@@ -157,7 +157,8 @@
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
         '<div class="field" style="flex:1">'+
-          '<label>Brand / Manufacturer</label><input id="sku-brand-input" placeholder="e.g. Creality">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand / Manufacturer</label><button type="button" class="btn btn-ghost btn-sm" id="sku-btn-add-brand" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
+          '<select id="sku-brand-select" style="font-weight:600;"><option value="">Select Brand...</option></select>'+
         '</div>'+
         '<div class="field" style="flex:1">'+
           '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
@@ -213,6 +214,7 @@
   frame.appendChild(panel);
 
   var items=[],editId=null;
+  var customBrands = []; // Additional brands entered by user locally
   function $(id){return document.getElementById(id);}
 
   /* ── PREVIEW BUILDER ── */
@@ -221,7 +223,7 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
-    var brandName=$('sku-brand-input').value || '';
+    var brandName=$('sku-brand-select').value || '';
     var brandCode=getBrandCode(brandName);
     var varCode=($('sku-var-code').value || '').trim().toUpperCase();
 
@@ -260,7 +262,7 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-input','sku-var-code'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-select','sku-var-code'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);
@@ -271,6 +273,45 @@
     $('sku-var-name').addEventListener('input', onVarNameInput);
   }
   ['sku-cost','sku-price'].forEach(function(id){$(id).addEventListener('input',calcMargin);});
+
+  // Prompt action to append a Brand dynamically
+  $('sku-btn-add-brand').addEventListener('click', function(e) {
+    e.preventDefault();
+    var newBrandName = prompt('Enter the name of the new Brand:');
+    if (newBrandName && newBrandName.trim()) {
+      var cleanBrand = newBrandName.trim();
+      if (!customBrands.includes(cleanBrand)) {
+        customBrands.push(cleanBrand);
+      }
+      populateBrandsDropdown(cleanBrand);
+      buildPreview();
+    }
+  });
+
+  /* ── POPULATE BRAND DROPDOWN ── */
+  function populateBrandsDropdown(selectedValue) {
+    var uniqueBrands = new Set(['CREALITY', 'OVERTURE', 'GEEETECH', 'GIANTARM', 'SAWGRASS', 'TEXPRINT', 'CRAFTML', 'JANE_DESIGN']);
+    items.forEach(function(item) {
+      if (item.brand && item.brand.trim()) {
+        uniqueBrands.add(item.brand.trim());
+      }
+    });
+    customBrands.forEach(function(b) {
+      uniqueBrands.add(b);
+    });
+
+    var sortedBrands = Array.from(uniqueBrands).sort(function(a, b) {
+      return a.localeCompare(b);
+    });
+
+    var html = '<option value="">Select Brand...</option>';
+    sortedBrands.forEach(function(b) {
+      var sel = (selectedValue && selectedValue.toLowerCase() === b.toLowerCase()) ? ' selected' : '';
+      html += '<option value="' + escapeHtml(b) + '"' + sel + '>' + escapeHtml(b) + '</option>';
+    });
+
+    $('sku-brand-select').innerHTML = html;
+  }
 
   /* ── LOAD SUPPLIERS ── */
   async function loadSuppliers(){
@@ -420,6 +461,7 @@
       items=await window.makerAPI.readData(FILE)||[];
     }
 
+    populateBrandsDropdown();
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
@@ -502,7 +544,7 @@
         $('sku-var-name').value=i.variation || '';
         $('sku-var-code').value=i.varCode || '';
         $('sku-pname').value=i.name||'';
-        $('sku-brand-input').value=i.brand||'';
+        populateBrandsDropdown(i.brand || '');
         $('sku-supplier-select').value=i.supplier||'';
         $('sku-classification').value=i.classification || 'Raw Component / Material (BOM Input)';
         $('sku-cost').value=i.cost||'';
@@ -546,7 +588,7 @@
       name:name,
       cat:catCode,
       subcat:subCode,
-      brand:$('sku-brand-input').value.trim(),
+      brand:$('sku-brand-select').value,
       supplier:$('sku-supplier-select').value,
       variation:$('sku-var-name').value.trim(),
       varCode:$('sku-var-code').value.trim().toUpperCase(),
@@ -583,7 +625,7 @@
     $('sku-cancel').style.display='none';
     $('sku-custom').value='';
     $('sku-pname').value='';
-    $('sku-brand-input').value='';
+    populateBrandsDropdown('');
     $('sku-supplier-select').value='';
     $('sku-var-name').value='';
     $('sku-var-code').value='';
