@@ -473,6 +473,10 @@ async function loadInventory(forceRefresh = false) {
   // Fallback: Use local data if fetch failed entirely
   window.__inventoryCache = localData;
   renderInventoryTable(window.__inventoryCache);
+
+  if (forceRefresh) {
+    alert('🔄 Inventory synchronized successfully!\n' + (window.__inventoryCache ? window.__inventoryCache.length : 0) + ' entries loaded/updated in the database.');
+  }
 }
 
 /**

@@ -219,6 +219,10 @@ window.__suppliersCache = null;
 
     window.__suppliersCache = localData;
     render();
+
+    if (forceRefresh) {
+      alert('🔄 Suppliers synchronized successfully!\n' + (window.__suppliersCache ? window.__suppliersCache.length : 0) + ' entries loaded/updated in the database.');
+    }
   }
 
   async function sv(){
