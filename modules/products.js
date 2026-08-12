@@ -859,7 +859,7 @@ window.__productsCache = null;
       var photoCell = '';
       if (p.photo) {
         var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(p.photo) : p.photo;
-        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${p.photo}')">`;
+        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(p.photo)}'))">`;
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }

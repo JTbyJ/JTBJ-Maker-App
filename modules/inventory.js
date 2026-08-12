@@ -118,7 +118,7 @@ window.__makerInit_inventory = function () {
             </div>
 
             <div class="input-row">
-              <div class="field" style="flex:1;"><label>Photo URL / Image Link</label><input type="text" id="inv-form-photo" placeholder="e.g. https://imgur.com/example.png"></div>
+              <div class="field" style="flex:1;"><label>Photo URL / Image Link (Google Drive Share Link)</label><input type="text" id="inv-form-photo" placeholder="e.g. https://drive.google.com/file/d/.../view?usp=sharing"></div>
             </div>
 
             <div class="input-row">
@@ -522,7 +522,7 @@ function renderInventoryTable(items) {
     var photoCell = '';
     if (imageLink) {
       var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(imageLink) : imageLink;
-      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox('${escapeHtml(imageLink)}')">`;
+      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))">`;
     } else {
       photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
     }

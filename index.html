@@ -208,10 +208,25 @@
   const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',categories:'Category Manager',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
 'customers': 'Customers',
 'orders': 'Orders'};
-  function activatePanel(id){
-    if(window['__makerInit_'+id])window['__makerInit_'+id]();
+  async function activatePanel(id){
+    if(window['__makerInit_'+id]) {
+      try {
+        await window['__makerInit_'+id]();
+      } catch(e) {
+        console.error('Error initializing panel ' + id, e);
+      }
+    }
     document.querySelectorAll('.module-panel').forEach(p=>p.classList.remove('active'));
-    const t=document.getElementById('panel-'+id);if(t)t.classList.add('active');
+    const t=document.getElementById('panel-'+id);
+    if(t) {
+      t.classList.add('active');
+      setTimeout(() => {
+        const editable = t.querySelector('input:not([type="hidden"]):not([readonly]), select:not([disabled]), textarea:not([readonly])');
+        if (editable) {
+          editable.focus();
+        }
+      }, 100);
+    }
     navItems.forEach(n=>n.classList.toggle('active',n.dataset.panel===id));
     titleEl.textContent=LABELS[id]||id;
   }
