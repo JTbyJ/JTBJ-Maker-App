@@ -1,5 +1,5 @@
 🛠️ Maker Lab Architecture & Module Coding Standards
-Document Version: 1.1.3
+Document Version: 2.1.0
 
 Target Environment: Electron / Vanilla JS Frontend + Google Sheets Backend API
 
@@ -101,6 +101,10 @@ O	Cost	cost	0
 P	Location	location	''
 Q	Supplier	supplier	''
 R	Notes	notes	''
+
+*Note on Database Normalization & Dynamic Enrichment:*
+To prevent data redundancy and maintain a single source of truth (SSOT), the local file `inventory.json` is fully normalized. It does not store duplicate fields like `Name`, `Brand`, `Category`, or `Subcategory`.
+Instead, the `makerAPI.readData('inventory.json')` and `makerAPI.writeData('inventory.json')` operations are intercepted globally inside `modules/config.js`. When reading inventory data, these fields are dynamically resolved and enriched in-memory directly from the master SKU catalog (`sku.json`), guaranteeing referential integrity and instant propagation of catalog edits to inventory lot representations.
 
 C. Suppliers Sheet Mapping
 Column	Sheet Header	JavaScript Property	Default / Fallback
