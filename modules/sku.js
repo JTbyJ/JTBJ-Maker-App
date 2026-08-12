@@ -118,28 +118,36 @@
       '<div style="background:var(--bg);border:2px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center">'+
         '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">SKU Preview</div>'+
         '<div id="sku-preview" style="font-size:28px;font-weight:900;font-family:monospace;color:var(--accent);letter-spacing:2px">FIL-PLA-001</div>'+
-        '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Format: CATEGORY-SUBCATEGORY-SEQUENCE</div>'+
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Format: CATEGORY-SUBCATEGORY-SEQUENCE / VARIATION</div>'+
       '</div>'+
 
       /* CATEGORY + SUBCATEGORY SELECTS */
       '<div class="input-row">'+
-        '<div class="field">'+
+        '<div class="field" style="flex:1">'+
           '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">CATEGORY GROUP</label><button type="button" class="btn btn-ghost btn-sm" data-goto="categories" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>'+
           '<select id="sku-catgroup" style="font-family:monospace;font-weight:700">'+
             buildCatOptions('FIL')+
           '</select>'+
         '</div>'+
-        '<div class="field">'+
+        '<div class="field" style="flex:1">'+
           '<label>SUB-CATEGORY CODE</label>'+
           '<select id="sku-subcat" style="font-family:monospace;font-weight:700">'+
             buildSubcatOptions('FIL','PLA')+
           '</select>'+
         '</div>'+
-        '<div class="field">'+
-          '<label>SEQUENCE #</label>'+
-          '<input id="sku-seq" value="001" placeholder="001" style="font-family:monospace;font-weight:700;width:80px">'+
+        '<div class="field" style="flex:1.5">'+
+          '<label>Variation (e.g. Colour)</label>'+
+          '<input id="sku-var-name" placeholder="e.g. Black" style="font-weight:700">'+
         '</div>'+
-        '<div class="field">'+
+        '<div class="field" style="width:100px">'+
+          '<label>Var Code</label>'+
+          '<input id="sku-var-code" placeholder="BLK" style="font-family:monospace;font-weight:700">'+
+        '</div>'+
+        '<div class="field" style="width:100px" id="sku-seq-field-container">'+
+          '<label>SEQUENCE #</label>'+
+          '<input id="sku-seq" value="001" placeholder="001" style="font-family:monospace;font-weight:700">'+
+        '</div>'+
+        '<div class="field" style="flex:1.5">'+
           '<label>Custom Override SKU</label>'+
           '<input id="sku-custom" placeholder="Leave blank to auto-build" style="font-family:monospace">'+
         '</div>'+
@@ -149,8 +157,12 @@
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
         '<div class="field" style="flex:1">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand/Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
-          '<select id="sku-brand" style="font-weight:600;"><option value="">Select Supplier...</option></select>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand / Manufacturer</label><button type="button" class="btn btn-ghost btn-sm" id="sku-btn-add-brand" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
+          '<select id="sku-brand-select" style="font-weight:600;"><option value="">Select Brand...</option></select>'+
+        '</div>'+
+        '<div class="field" style="flex:1">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
+          '<select id="sku-supplier-select" style="font-weight:600;"><option value="">Select Supplier...</option></select>'+
         '</div>'+
         '<div class="field" style="flex:1"><label>Classification</label><select id="sku-classification"><option>Raw Component / Material (BOM Input)</option><option>Finished Sellable Product (Etsy/Custom)</option></select></div>'+
         '<div class="field" style="flex:1"><label>Status</label><select id="sku-status"><option>Active</option><option>Draft</option><option>Discontinued</option></select></div>'+
@@ -195,13 +207,14 @@
       '</select>'+
     '</div>'+
     '<div class="table-wrap"><table><thead><tr>'+
-      '<th>Photo</th><th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand/Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
+      '<th>Photo</th><th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand</th><th>Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
     '</tr></thead><tbody id="sku-tbody"></tbody></table></div>' +
     '';
 
   frame.appendChild(panel);
 
   var items=[],editId=null;
+  var customBrands = []; // Additional brands entered by user locally
   function $(id){return document.getElementById(id);}
 
   /* ── PREVIEW BUILDER ── */
@@ -210,10 +223,24 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
-    var brandName=$('sku-brand').value || '';
+    var brandName=$('sku-brand-select').value || '';
     var brandCode=getBrandCode(brandName);
-    var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub,brandCode);
-    $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+String(parseInt(seq)||1).padStart(3,'0');
+    var varCode=($('sku-var-code').value || '').trim().toUpperCase();
+
+    if (varCode) {
+      if ($('sku-seq-field-container')) $('sku-seq-field-container').style.opacity = '0.4';
+      $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+varCode;
+    } else {
+      if ($('sku-seq-field-container')) $('sku-seq-field-container').style.opacity = '1';
+      var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub,brandCode);
+      $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+String(parseInt(seq)||1).padStart(3,'0');
+    }
+  }
+
+  function onVarNameInput() {
+    var varName = $('sku-var-name').value;
+    $('sku-var-code').value = getBrandCode(varName);
+    buildPreview();
   }
 
   /* ── CATEGORY CHANGE ── */
@@ -235,14 +262,56 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-select','sku-var-code'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);
       el.addEventListener('change',id==='sku-catgroup'?onCatGroupChange:buildPreview);
     }
   });
+  if ($('sku-var-name')) {
+    $('sku-var-name').addEventListener('input', onVarNameInput);
+  }
   ['sku-cost','sku-price'].forEach(function(id){$(id).addEventListener('input',calcMargin);});
+
+  // Prompt action to append a Brand dynamically
+  $('sku-btn-add-brand').addEventListener('click', function(e) {
+    e.preventDefault();
+    var newBrandName = prompt('Enter the name of the new Brand:');
+    if (newBrandName && newBrandName.trim()) {
+      var cleanBrand = newBrandName.trim();
+      if (!customBrands.includes(cleanBrand)) {
+        customBrands.push(cleanBrand);
+      }
+      populateBrandsDropdown(cleanBrand);
+      buildPreview();
+    }
+  });
+
+  /* ── POPULATE BRAND DROPDOWN ── */
+  function populateBrandsDropdown(selectedValue) {
+    var uniqueBrands = new Set(['CREALITY', 'OVERTURE', 'GEEETECH', 'GIANTARM', 'SAWGRASS', 'TEXPRINT', 'CRAFTML', 'JANE_DESIGN']);
+    items.forEach(function(item) {
+      if (item.brand && item.brand.trim()) {
+        uniqueBrands.add(item.brand.trim());
+      }
+    });
+    customBrands.forEach(function(b) {
+      uniqueBrands.add(b);
+    });
+
+    var sortedBrands = Array.from(uniqueBrands).sort(function(a, b) {
+      return a.localeCompare(b);
+    });
+
+    var html = '<option value="">Select Brand...</option>';
+    sortedBrands.forEach(function(b) {
+      var sel = (selectedValue && selectedValue.toLowerCase() === b.toLowerCase()) ? ' selected' : '';
+      html += '<option value="' + escapeHtml(b) + '"' + sel + '>' + escapeHtml(b) + '</option>';
+    });
+
+    $('sku-brand-select').innerHTML = html;
+  }
 
   /* ── LOAD SUPPLIERS ── */
   async function loadSuppliers(){
@@ -259,9 +328,9 @@
         html += '<option value="' + name + '">' + name + '</option>';
       });
     }
-    var brandSelect = $('sku-brand');
-    if (brandSelect) {
-      brandSelect.innerHTML = html;
+    var supplierSelect = $('sku-supplier-select');
+    if (supplierSelect) {
+      supplierSelect.innerHTML = html;
     }
   }
 
@@ -283,7 +352,10 @@
             name: item.name || 'Unnamed Item',
             cat: item.cat || 'FIL',
             subcat: item.subcat || '',
-            brand: item.supplier || item.brand || '',
+            brand: item.brand || '',
+            supplier: item.supplier || '',
+            variation: item.colour || '',
+            varCode: '',
             cost: Number(item.cost) || 0,
             price: 0,
             cogs: 0,
@@ -300,7 +372,8 @@
             var rowArray = [
               newSku.id, newSku.sku, newSku.name, newSku.cat, newSku.subcat,
               newSku.brand, newSku.cost, newSku.price, newSku.cogs, newSku.retail,
-              newSku.status, newSku.notes, newSku.classification
+              newSku.status, newSku.notes, newSku.classification, '',
+              newSku.supplier, newSku.variation, newSku.varCode
             ];
             window.MAKER_CONFIG.saveToDatabase('Sku', rowArray);
           }
@@ -344,6 +417,10 @@
           const classIdx = header.findIndex(h => h === 'classification' || h.includes('class'));
           const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
+          const supplierIdx = header.findIndex(h => h === 'supplier' || h.includes('supplier'));
+          const varIdx = header.findIndex(h => h === 'variation' || h.includes('var'));
+          const varCodeIdx = header.findIndex(h => h === 'varcode' || h === 'variation_code' || h.includes('varcode'));
+
           const parsedSkus = [];
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
@@ -358,6 +435,9 @@
               cat: catIdx !== -1 ? r[catIdx] : firstCat,
               subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
               brand: brandIdx !== -1 ? r[brandIdx] : '',
+              supplier: supplierIdx !== -1 ? r[supplierIdx] : '',
+              variation: varIdx !== -1 ? r[varIdx] : '',
+              varCode: varCodeIdx !== -1 ? r[varCodeIdx] : '',
               cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
               price: priceIdx !== -1 ? (Number(r[priceIdx]) || 0) : 0,
               cogs: cogsIdx !== -1 ? (Number(r[cogsIdx]) || 0) : 0,
@@ -381,6 +461,7 @@
       items=await window.makerAPI.readData(FILE)||[];
     }
 
+    populateBrandsDropdown();
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
@@ -437,6 +518,7 @@
         '<td>'+classBadge+'</td>'+
         '<td>'+catBadge+'<br><span style="font-size:11px;color:var(--text-muted)">'+(i.subcat?escapeHtml(i.subcat):'')+'</span></td>'+
         '<td>'+escapeHtml(i.brand||'—')+'</td>'+
+        '<td>'+escapeHtml(i.supplier||'—')+'</td>'+
         '<td>$'+Number(i.cost||0).toFixed(2)+'</td>'+
         '<td>$'+Number(i.price||0).toFixed(2)+'</td>'+
         '<td>$'+Number(i.cogs||0).toFixed(2)+'</td>'+
@@ -448,7 +530,7 @@
           '<button class="btn btn-danger btn-sm skud" data-id="'+i.id+'">Del</button>'+
         '</td>'+
       '</tr>';
-    }).join(''):'<tr><td colspan="12" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
+    }).join(''):'<tr><td colspan="14" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
 
     /* Edit buttons */
     panel.querySelectorAll('.skue').forEach(function(b){
@@ -459,8 +541,11 @@
         $('sku-catgroup').value=i.cat || Object.keys(OSOT_CATS)[0];
         $('sku-subcat').innerHTML=buildSubcatOptions(i.cat || Object.keys(OSOT_CATS)[0], i.subcat || '');
         $('sku-seq').value='';
+        $('sku-var-name').value=i.variation || '';
+        $('sku-var-code').value=i.varCode || '';
         $('sku-pname').value=i.name||'';
-        $('sku-brand').value=i.brand||'';
+        populateBrandsDropdown(i.brand || '');
+        $('sku-supplier-select').value=i.supplier||'';
         $('sku-classification').value=i.classification || 'Raw Component / Material (BOM Input)';
         $('sku-cost').value=i.cost||'';
         $('sku-price').value=i.price||'';
@@ -503,7 +588,10 @@
       name:name,
       cat:catCode,
       subcat:subCode,
-      brand:$('sku-brand').value,
+      brand:$('sku-brand-select').value,
+      supplier:$('sku-supplier-select').value,
+      variation:$('sku-var-name').value.trim(),
+      varCode:$('sku-var-code').value.trim().toUpperCase(),
       classification:$('sku-classification').value,
       cost:Number($('sku-cost').value)||0,
       price:Number($('sku-price').value)||0,
@@ -525,7 +613,8 @@
       await window.MAKER_CONFIG.saveToDatabase('Sku', [
         obj.id, obj.sku, obj.name, obj.cat, obj.subcat,
         obj.brand, obj.cost, obj.price, obj.cogs, obj.retail,
-        obj.status, obj.notes, obj.classification, obj.photo
+        obj.status, obj.notes, obj.classification, obj.photo,
+        obj.supplier, obj.variation, obj.varCode
       ]);
     }
   });
@@ -536,7 +625,10 @@
     $('sku-cancel').style.display='none';
     $('sku-custom').value='';
     $('sku-pname').value='';
-    $('sku-brand').value='';
+    populateBrandsDropdown('');
+    $('sku-supplier-select').value='';
+    $('sku-var-name').value='';
+    $('sku-var-code').value='';
     $('sku-classification').value='Raw Component / Material (BOM Input)';
     $('sku-cost').value='';
     $('sku-price').value='';

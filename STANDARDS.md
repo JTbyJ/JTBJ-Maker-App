@@ -1,9 +1,9 @@
 🛠️ Maker Lab Architecture & Module Coding Standards
-Document Version: 2.1.0
+Document Version: 2.2.0
 
 Target Environment: Electron / Vanilla JS Frontend + Google Sheets Backend API
 
-Core Objective: Maintain a high-performance, database-driven architecture across all application modules using in-memory caching and real-time Google Sheets synchronization[cite: 5, 6].
+Core Objective: Maintain a high-performance, database-driven architecture across all application modules using in-memory caching and real-time Google Sheets synchronization.
 
 📑 Table of Contents
 Core Architectural Principles
@@ -27,61 +27,61 @@ Electron UI & Event Handling Safety
 Module Blueprint Template
 
 1. Core Architectural Principles
-Database First (No Pure Local JSON): All CRUD actions sync directly through window.MAKER_CONFIG.saveToDatabase(sheetName, rowArray) or window.makerAPI.saveRowData(sheetName, rowArray)[cite: 5, 6]. Local JSON storage (makerAPI.writeData) is treated strictly as an offline fallback or secondary cache[cite: 6].
+Database First (No Pure Local JSON): All CRUD actions sync directly through window.MAKER_CONFIG.saveToDatabase(sheetName, rowArray) or window.makerAPI.saveRowData(sheetName, rowArray). Local JSON storage (makerAPI.writeData) is treated strictly as an offline fallback or secondary cache.
 
-1D Row Array Alignment: Google Sheets API operations accept flat positional arrays[cite: 6]. Arrays passed to database save functions must match the exact column index sequence (Column A through Column Z) defined in the database tab[cite: 5, 6].
+1D Row Array Alignment: Google Sheets API operations accept flat positional arrays. Arrays passed to database save functions must match the exact column index sequence (Column A through Column Z) defined in the database tab.
 
-Unique Key Generation: Every database record must generate a collision-safe ID string using[cite: 6]:
+Unique Key Generation: Every database record must generate a collision-safe ID string using:
 
 JavaScript
 const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-State Hygiene: Every form must feature an explicit resetFormState() function that clears inputs, resets hidden fields, restores dynamic titles, and sets currentEditId = null[cite: 6].
+State Hygiene: Every form must feature an explicit resetFormState() function that clears inputs, resets hidden fields, restores dynamic titles, and sets currentEditId = null.
 
 2. Data Flow & In-Memory Caching Architecture
-To ensure fast UI rendering and prevent exceeding Google Apps Script API rate limits, modules use a hybrid in-memory caching model[cite: 5].
+To ensure fast UI rendering and prevent exceeding Google Apps Script API rate limits, modules use a hybrid in-memory caching model.
 
-Global Memory Stores: Data fetched from Google Sheets is stored in global memory window objects[cite: 5]:
+Global Memory Stores: Data fetched from Google Sheets is stored in global memory window objects:
 
-window.__inventoryCache for Inventory items[cite: 5].
+window.__inventoryCache for Inventory items.
 
-window.__customerCache for Customer profiles[cite: 5].
+window.__customerCache for Customer profiles.
 
 window.__suppliersCache for Supplier profiles.
 
-Instant Tab Switching: When navigating between app modules, the module's initializer checks if its corresponding window.__<module>Cache object exists[cite: 5]. If populated, it renders instantly from local memory instead of making a new network request[cite: 5].
+Instant Tab Switching: When navigating between app modules, the module's initializer checks if its corresponding window.__<module>Cache object exists. If populated, it renders instantly from local memory instead of making a new network request.
 
-Optimistic Local Updates: Any user action that creates, edits, or deletes a record immediately updates the in-memory array and re-renders the UI, giving the user instant feedback without waiting for network latency[cite: 5].
+Optimistic Local Updates: Any user action that creates, edits, or deletes a record immediately updates the in-memory array and re-renders the UI, giving the user instant feedback without waiting for network latency.
 
-Manual Sync: Users can click the 🔄 Sync button in any panel header to bypass the local cache and pull live, fresh data directly from the Google Sheet database[cite: 5].
+Manual Sync: Users can click the 🔄 Sync button in any panel header to bypass the local cache and pull live, fresh data directly from the Google Sheet database.
 
 3. Google Sheets Backend Integration (Code.gs)
-The app communicates with a central Google Sheet via Google Apps Script web endpoints (doGet / doPost)[cite: 5].
+The app communicates with a central Google Sheet via Google Apps Script web endpoints (doGet / doPost).
 
-Dynamic Tab Operations: The Code.gs handler inspects incoming request payloads (sheet parameter) and targets or creates tabs dynamically (e.g., 'Customers', 'Inventory')[cite: 5].
+Dynamic Tab Operations: The Code.gs handler inspects incoming request payloads (sheet parameter) and targets or creates tabs dynamically (e.g., 'Customers', 'Inventory').
 
-Column-Agnostic Matching: Code.gs inspects Column A (Record ID) of the target sheet[cite: 5]:
+Column-Agnostic Matching: Code.gs inspects Column A (Record ID) of the target sheet:
 
-Update: If a matching ID is found, it updates the existing row with the array payload[cite: 5].
+Update: If a matching ID is found, it updates the existing row with the array payload.
 
-Append: If the ID does not exist, it appends a new row to the bottom of the sheet[cite: 5].
+Append: If the ID does not exist, it appends a new row to the bottom of the sheet.
 
 4. Google Sheets Database Schema Standard
-A. Customers Sheet Mapping[cite: 6]
+A. Customers Sheet Mapping
 Column	Sheet Header	JavaScript Property	Default / Fallback
-A	Customer_ID	id	Generated Hash[cite: 6]
-B	Name	name	'Unnamed'[cite: 6]
-C	Email	email	''[cite: 6]
-D	Phone	phone	'' (Formatted +1)[cite: 6]
-E	Address	address	''[cite: 6]
-F	Finish_Preference	finishPref	''[cite: 6]
-G	Instagram_Handle	igHandle	''[cite: 6]
-H	Customer_Type	type	'Personal'[cite: 6]
-I	Notes	notes	''[cite: 6]
-J	Created_At	createdAt	YYYY-MM-DD[cite: 6]
+A	Customer_ID	id	Generated Hash
+B	Name	name	'Unnamed'
+C	Email	email	''
+D	Phone	phone	'' (Formatted +1)
+E	Address	address	''
+F	Finish_Preference	finishPref	''
+G	Instagram_Handle	igHandle	''
+H	Customer_Type	type	'Personal'
+I	Notes	notes	''
+J	Created_At	createdAt	YYYY-MM-DD
 
 *Note on Address Validation / Autocomplete:* The Customer shipping/mailing address (Column E) is integrated with Google Places API Autocomplete. The Places Autocomplete script is loaded dynamically using the key defined in `window.MAKER_CONFIG.googleMapsApiKey`. The dropdown has custom dark-themed styling overrides (`.pac-container`) and handles `Enter` key behavior to prevent form submission during selection.
 
-B. Inventory Sheet Mapping[cite: 5]
+B. Inventory Sheet Mapping
 Column	Sheet Header	JavaScript Property	Default / Fallback
 A	Item_ID	id	Generated Hash
 B	SKU	sku	''
@@ -105,6 +105,7 @@ R	Notes	notes	''
 *Note on Database Normalization & Dynamic Enrichment:*
 To prevent data redundancy and maintain a single source of truth (SSOT), the local file `inventory.json` is fully normalized. It does not store duplicate fields like `Name`, `Brand`, `Category`, or `Subcategory`.
 Instead, the `makerAPI.readData('inventory.json')` and `makerAPI.writeData('inventory.json')` operations are intercepted globally inside `modules/config.js`. When reading inventory data, these fields are dynamically resolved and enriched in-memory directly from the master SKU catalog (`sku.json`), guaranteeing referential integrity and instant propagation of catalog edits to inventory lot representations.
+Cost calculations, margin suggestions, and BOM-level estimation formulas dynamically query the master SKU's average cost metrics in real-time.
 
 C. Suppliers Sheet Mapping
 Column	Sheet Header	JavaScript Property	Default / Fallback
@@ -123,10 +124,10 @@ L	Shipping_Policy	shipping	''
 M	Notes	notes	''
 
 5. Required Utility Helpers
-Copy these utility functions into every module script (or a shared utils.js library) to maintain data consistency[cite: 6].
+Copy these utility functions into every module script (or a shared utils.js library) to maintain data consistency.
 
-A. Multiline-Safe CSV Parser[cite: 6]
-Standard String.prototype.split('\n') corrupts database records when notes or addresses contain inline line breaks[cite: 6]. Use this character-by-character scanner[cite: 6]:
+A. Multiline-Safe CSV Parser
+Standard String.prototype.split('\n') corrupts database records when notes or addresses contain inline line breaks. Use this character-by-character scanner:
 
 JavaScript
 function parseCSVRows(text) {
@@ -169,8 +170,8 @@ function parseCSVRows(text) {
   }
   return rows;
 }
-B. Phone Number Normalizer[cite: 6]
-Cleans raw numeric inputs from forms and CSV files into standard North American format[cite: 6]:
+B. Phone Number Normalizer
+Cleans raw numeric inputs from forms and CSV files into standard North American format:
 
 JavaScript
 function formatPhoneNumber(phone) {
@@ -186,8 +187,8 @@ function formatPhoneNumber(phone) {
   }
   return phone;
 }
-C. HTML Escaper (XSS Protection)[cite: 6]
-Always wrap string variables inside HTML template literals with escapeHtml() prior to rendering tables[cite: 6]:
+C. HTML Escaper (XSS Protection)
+Always wrap string variables inside HTML template literals with escapeHtml() prior to rendering tables:
 
 JavaScript
 function escapeHtml(str) {
@@ -198,7 +199,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 6. Electron UI & Event Handling Safety
-To prevent Electron window frameless dragging (-webkit-app-region: drag) from capturing clicks or blocking typing focus, every panel template must include the following style rules on its container elements[cite: 6]:
+To prevent Electron window frameless dragging (-webkit-app-region: drag) from capturing clicks or blocking typing focus, every panel template must include the following style rules on its container elements:
 
 CSS
 #panel-[module-name], 
@@ -217,7 +218,7 @@ CSS
   z-index: 99999 !important;
 }
 7. Module Blueprint Template
-When building or converting any JS file (e.g., inventory.js, customers.js, orders.js), use this structural skeletal pattern[cite: 6] with in-memory caching[cite: 5]:
+When building or converting any JS file (e.g., inventory.js, customers.js, orders.js), use this structural skeletal pattern with in-memory caching:
 
 JavaScript
 /**

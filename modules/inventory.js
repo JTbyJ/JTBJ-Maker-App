@@ -83,7 +83,7 @@ window.__makerInit_inventory = function () {
                     </select>
                   </div>
                   <div class="field" style="flex:1;"><label>Subcategory (e.g. PLA)</label><input type="text" id="inv-inline-sku-subcat" placeholder="e.g. PLA"></div>
-                  <div class="field" style="flex:1;"><label>Brand / Supplier</label><input type="text" id="inv-inline-sku-brand" placeholder="Creality"></div>
+                  <div class="field" style="flex:1;"><label>Brand / Manufacturer</label><input type="text" id="inv-inline-sku-brand" placeholder="Creality"></div>
                 </div>
               </div>
             </div>
@@ -513,8 +513,8 @@ function renderInventoryTable(items) {
     const badgeClass = isLow ? 'badge-red' : 'badge-green';
     const badgeText = isLow ? `Low Stock (${item.qty})` : `In Stock (${item.qty})`;
     
-    // Cost calculations
-    const repCost = Number(item.cost || 0);
+    // Cost calculations - strictly referencing master SKU cost
+    const repCost = resolvedSku ? Number(resolvedSku.cost || 0) : Number(item.cost || 0);
     const capacity = Number(item.metricCapacity || 1);
     const unitCost = repCost / capacity;
 

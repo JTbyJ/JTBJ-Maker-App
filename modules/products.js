@@ -32,7 +32,9 @@ window.__productsCache = null;
           #panel-products button,
           #panel-products select,
           #ai-seo-modal,
-          #ai-seo-modal * {
+          #ai-seo-modal *,
+          #prod-inline-sku-modal,
+          #prod-inline-sku-modal * {
             pointer-events: auto !important;
             user-select: text !important;
             -webkit-user-select: text !important;
@@ -132,7 +134,10 @@ window.__productsCache = null;
               
               <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
                 <div class="field" style="flex:1">
-                  <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Inventory Item</label><button type="button" class="btn btn-ghost btn-sm" data-goto="inventory" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <label style="margin:0">Inventory Item</label>
+                    <button type="button" class="btn btn-ghost btn-sm" id="prod-btn-inline-sku" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">⚡ New Inline SKU</button>
+                  </div>
                   <select id="p-bom-item"><option value="">Select Raw Item...</option></select>
                 </div>
                 <div class="field" style="width:110px">
@@ -236,6 +241,50 @@ window.__productsCache = null;
             </div>
           </div>
         </div>
+
+        <!-- PROD INLINE SKU MODAL -->
+        <div id="prod-inline-sku-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
+          <div class="card" style="background:var(--surface); width:480px; border:1px solid var(--border); border-radius:var(--radius); padding:24px; position:relative; box-shadow:0 10px 40px rgba(0,0,0,0.6); display:flex; flex-direction:column; gap:16px;">
+            <h3 style="margin-bottom:4px; font-size:16px; font-weight:700; color:var(--accent);">⚡ Fast Create New SKU Inline</h3>
+            <div class="field">
+              <label>SKU Code</label>
+              <input type="text" id="p-inline-sku-code" placeholder="e.g. FIL-PLA-CRE-005" style="font-family:monospace; font-weight:700;">
+            </div>
+            <div class="field">
+              <label>Item Name</label>
+              <input type="text" id="p-inline-sku-name" placeholder="e.g. Creality Black PLA">
+            </div>
+            <div class="input-row">
+              <div class="field" style="flex:1;">
+                <label>Category</label>
+                <select id="p-inline-sku-cat">
+                  <option value="FIL">Filament (FIL)</option>
+                  <option value="MAT">Raw Materials (MAT)</option>
+                  <option value="BLK">Blanks (BLK)</option>
+                  <option value="SUB">Sublimation Supplies (SUB)</option>
+                </select>
+              </div>
+              <div class="field" style="flex:1;">
+                <label>Subcategory Code</label>
+                <input type="text" id="p-inline-sku-subcat" placeholder="e.g. PLA">
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="field" style="flex:1;">
+                <label>Brand / Manufacturer</label>
+                <input type="text" id="p-inline-sku-brand" placeholder="e.g. Creality">
+              </div>
+              <div class="field" style="flex:1;">
+                <label>Cost ($)</label>
+                <input type="number" id="p-inline-sku-cost" step="0.01" value="0.00">
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button type="button" class="btn btn-ghost" id="p-inline-sku-cancel">Cancel</button>
+              <button type="button" class="btn btn-primary" id="p-inline-sku-save">Create &amp; Add SKU</button>
+            </div>
+          </div>
+        </div>
       `;
       frame.appendChild(p);
       setupEvents();
@@ -274,11 +323,77 @@ window.__productsCache = null;
       g('an-matrix-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Select a material above to simulate pricing impacts.</td></tr>';
     });
 
+    // Inline SKU Modal controllers
+    g('prod-btn-inline-sku').addEventListener('click', function(e) {
+      e.preventDefault();
+      g('p-inline-sku-code').value = '';
+      g('p-inline-sku-name').value = '';
+      g('p-inline-sku-subcat').value = '';
+      g('p-inline-sku-brand').value = '';
+      g('p-inline-sku-cost').value = '0.00';
+      g('prod-inline-sku-modal').style.display = 'flex';
+    });
+
+    g('p-inline-sku-cancel').addEventListener('click', function() {
+      g('prod-inline-sku-modal').style.display = 'none';
+    });
+
+    g('p-inline-sku-save').addEventListener('click', async function() {
+      var sku = g('p-inline-sku-code').value.trim();
+      var name = g('p-inline-sku-name').value.trim();
+      if (!sku || !name) {
+        alert('SKU Code and Item Name are required to create a SKU.');
+        return;
+      }
+      var cat = g('p-inline-sku-cat').value;
+      var subcat = g('p-inline-sku-subcat').value.trim();
+      var brand = g('p-inline-sku-brand').value.trim();
+      var cost = Number(g('p-inline-sku-cost').value) || 0;
+
+      // 1. Write SKU to Master SKU Cache
+      let skus = [];
+      try { skus = await window.makerAPI.readData('sku.json') || []; } catch(err){}
+      const existing = skus.find(s => s.sku.toLowerCase() === sku.toLowerCase());
+      if (!existing) {
+        const skuId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const newSku = {
+          id: skuId,
+          sku: sku,
+          name: name,
+          cat: cat,
+          subcat: subcat,
+          brand: brand,
+          cost: cost,
+          price: 0,
+          cogs: 0,
+          retail: 0,
+          status: 'Active',
+          notes: 'Created inline from Product Catalog spec form',
+          classification: 'Raw Component / Material (BOM Input)'
+        };
+        skus.unshift(newSku);
+        await window.makerAPI.writeData('sku.json', skus);
+
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Sku', [
+            skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Product Catalog spec', 'Raw Component / Material (BOM Input)'
+          ]);
+        }
+      }
+
+      // 2. Refresh lists and close modal
+      await loadInventory();
+      g('prod-inline-sku-modal').style.display = 'none';
+
+      // 3. Auto-select the newly created SKU in the BOM picker
+      g('p-bom-item').value = sku;
+    });
+
     // Qty Required Dynamic Metric Label on Selected Item change
     g('p-bom-item').addEventListener('change', function() {
-      var id = g('p-bom-item').value;
+      var identifier = g('p-bom-item').value;
       var label = g('p-bom-qty-label');
-      var inv = invList.find(function(x){return x.id === id;});
+      var inv = invList.find(function(x){return x.sku === identifier || x.id === identifier;});
       if (inv && label) {
         label.textContent = 'Qty (' + (inv.unitMetric || 'ea') + ')';
       } else if (label) {
@@ -344,7 +459,7 @@ window.__productsCache = null;
       var qty=parseFloat(g('p-bom-qty').value)||0;
       var waste=parseFloat(g('p-bom-waste').value)||0;
       if(!id||qty<=0)return;
-      var inv=invList.find(function(x){return x.id===id;});
+      var inv=invList.find(function(x){return x.sku === id || x.id===id;});
       if(inv){
         var cap = Number(inv.metricCapacity || 1);
         const cost = Number(inv.cost || 0);
@@ -573,17 +688,38 @@ window.__productsCache = null;
 
   async function loadInventory(){
     try{
+      let skuCatalog = [];
+      try { skuCatalog = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+
       if (window.__inventoryCache && window.__inventoryCache.length > 0) {
         invList = window.__inventoryCache;
       } else {
         invList=await window.makerAPI.readData('inventory.json')||[];
         window.__inventoryCache = invList;
       }
+
+      // Ensure SKU catalog items not present in inventory can still be built (SSOT)
+      skuCatalog.forEach(s => {
+        const matches = invList.some(inv => inv.sku === s.sku);
+        if (!matches) {
+          invList.push({
+            id: s.sku,
+            sku: s.sku,
+            name: s.name,
+            brand: s.brand,
+            cat: s.cat,
+            subcat: s.subcat,
+            cost: s.cost,
+            unitMetric: 'ea',
+            metricCapacity: 1
+          });
+        }
+      });
     }catch(err){invList=[];}
     var sel=g('p-bom-item');if(!sel)return;
     sel.innerHTML='<option value="">Select Raw Item...</option>';
     invList.forEach(function(i){
-      var o=document.createElement('option');o.value=i.id;o.textContent=i.name+' ('+i.sku+')';sel.appendChild(o);
+      var o=document.createElement('option');o.value=i.sku || i.id;o.textContent=i.name+' ('+i.sku+')';sel.appendChild(o);
     });
   }
 
@@ -701,7 +837,7 @@ window.__productsCache = null;
       var dynamicMatCost = 0;
       if (p.bom && Array.isArray(p.bom)) {
         p.bom.forEach(function(bomItem) {
-          const invItem = currentInventory.find(x => x.id === bomItem.itemId || x.sku === bomItem.itemId);
+          const invItem = currentInventory.find(x => x.sku === bomItem.itemId || x.id === bomItem.itemId);
           if (invItem) {
             const cost = Number(invItem.cost || 0);
             const capacity = Number(invItem.metricCapacity || 1);
