@@ -36,9 +36,12 @@
             z-index: 99999 !important;
           }
         </style>
-        <div class="page-header">
-          <h2>Sales Orders Directory</h2>
-          <p>Record orders, build custom customer invoices, calculate exact margins, and sync transaction lines to your Google Database.</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+          <div>
+            <h2>Sales Orders Directory</h2>
+            <p>Record orders, build custom customer invoices, calculate exact margins, and sync transaction lines to your Google Database.</p>
+          </div>
+          <button class="btn btn-ghost" id="ord-sync-btn">🔄 Sync</button>
         </div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
@@ -164,6 +167,11 @@
   };
 
   function setupEvents(){
+    g('ord-sync-btn').addEventListener('click', async function() {
+      g('ord-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:20px;">Syncing orders with Google Sheets...</td></tr>';
+      await load();
+    });
+
     g('ord-tab-list-btn').addEventListener('click',function(){switchTab('list');});
     g('ord-tab-form-btn').addEventListener('click',function(){
       // Generate next serial if creating a new order
@@ -329,7 +337,7 @@
       const prod = products.find(p => p.id === line.productId || p.sku === line.productId);
       if (prod && prod.bom) {
         for (const bomItem of prod.bom) {
-          const invItem = inventory.find(inv => inv.id === bomItem.itemId);
+          const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
           if (invItem) {
             const qtyToSubtract = (bomItem.qty || 1) * line.qty;
             invItem.qty = Math.max(0, invItem.qty - qtyToSubtract);
@@ -428,30 +436,56 @@
       if (fetchFunc) {
         const remoteData = await fetchFunc('Orders');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
-          orders = remoteData.slice(startIndex).map(row => {
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'order_id' || h.includes('id'));
+          const orderNumIdx = header.findIndex(h => h === 'ordernumber' || h === 'order number' || h === 'order_number' || h.includes('number') || h.includes('num'));
+          const dateIdx = header.findIndex(h => h === 'date' || h === 'date purchased' || h.includes('date'));
+          const sourceIdx = header.findIndex(h => h === 'source' || h === 'sales channel' || h.includes('source') || h.includes('channel'));
+          const statusIdx = header.findIndex(h => h === 'status' || h === 'order status' || h.includes('status'));
+          const payIdx = header.findIndex(h => h === 'paymentstatus' || h === 'payment status' || h.includes('pay'));
+          const custIdIdx = header.findIndex(h => h === 'customerid' || h === 'customer id' || h.includes('customerid'));
+          const custNameIdx = header.findIndex(h => h === 'customername' || h === 'customer name' || h.includes('customername') || h.includes('customer_name'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes'));
+          const itemsIdx = header.findIndex(h => h === 'lineitems' || h === 'line items' || h.includes('items') || h.includes('lines'));
+          const subIdx = header.findIndex(h => h === 'subtotal' || h.includes('subtotal'));
+          const shipIdx = header.findIndex(h => h === 'shipping' || h.includes('shipping') || h.includes('ship'));
+          const totalIdx = header.findIndex(h => h === 'total' || h === 'total value' || h.includes('total'));
+          const cogsIdx = header.findIndex(h => h === 'cogs' || h.includes('cogs'));
+          const profitIdx = header.findIndex(h => h === 'profit' || h.includes('profit'));
+          const extIdIdx = header.findIndex(h => h === 'externalid' || h === 'external / 3rd party id' || h === 'external id' || h.includes('external'));
+
+          const parsedOrders = [];
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+
             let lineItems = [];
-            try { lineItems = JSON.parse(row[9] || '[]'); } catch(e) {}
-            return {
-              id: row[0] || '',
-              orderNumber: row[1] || '',
-              date: row[2] || '',
-              source: row[3] || '',
-              status: row[4] || 'Pending',
-              paymentStatus: row[5] || 'Paid',
-              customerId: row[6] || '',
-              customerName: row[7] || '',
-              notes: row[8] || '',
+            const rawItems = itemsIdx !== -1 ? r[itemsIdx] : '';
+            try { lineItems = JSON.parse(rawItems || '[]'); } catch(e) {}
+
+            parsedOrders.push({
+              id: idVal,
+              orderNumber: orderNumIdx !== -1 ? r[orderNumIdx] : '',
+              date: dateIdx !== -1 ? r[dateIdx] : '',
+              source: sourceIdx !== -1 ? r[sourceIdx] : 'Other',
+              status: statusIdx !== -1 ? r[statusIdx] : 'Pending',
+              paymentStatus: payIdx !== -1 ? r[payIdx] : 'Paid',
+              customerId: custIdIdx !== -1 ? r[custIdIdx] : '',
+              customerName: custNameIdx !== -1 ? r[custNameIdx] : '',
+              notes: notesIdx !== -1 ? r[notesIdx] : '',
               lineItems: lineItems,
-              subtotal: parseFloat(row[10]) || 0,
-              shipping: parseFloat(row[11]) || 0,
-              total: parseFloat(row[12]) || 0,
-              cogs: parseFloat(row[13]) || 0,
-              profit: parseFloat(row[14]) || 0,
-              externalId: row[15] || ''
-            };
-          }).filter(x => x.id && x.status !== 'DELETED');
-          
+              subtotal: subIdx !== -1 ? (parseFloat(r[subIdx]) || 0) : 0,
+              shipping: shipIdx !== -1 ? (parseFloat(r[shipIdx]) || 0) : 0,
+              total: totalIdx !== -1 ? (parseFloat(r[totalIdx]) || 0) : 0,
+              cogs: cogsIdx !== -1 ? (parseFloat(r[cogsIdx]) || 0) : 0,
+              profit: profitIdx !== -1 ? (parseFloat(r[profitIdx]) || 0) : 0,
+              externalId: extIdIdx !== -1 ? r[extIdIdx] : ''
+            });
+          }
+
+          orders = parsedOrders.filter(x => x.id && x.status !== 'DELETED');
           await window.makerAPI.writeData(FILE, orders);
           renderList();
           return;
@@ -707,7 +741,7 @@ async function importEtsyCSV(event) {
 
         // Subtract stock for each BOM item
         for (const bomItem of orderBom) {
-          const invItem = inventory.find(inv => inv.id === bomItem.itemId);
+          const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
           if (invItem) {
             const qtyToDeduct = (bomItem.qty || 1) * itemQty;
             invItem.qty = Math.max(0, invItem.qty - qtyToDeduct);
