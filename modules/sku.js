@@ -25,9 +25,23 @@
     OSOT_CATS = window.OSOT_CATS || OSOT_CATS;
   }
 
-  /* ── AUTO-SEQUENCE: find next number for a given CAT-SUBCAT ── */
-  function nextSeq(items,catCode,subCode){
-    var prefix=catCode+'-'+subCode+'-';
+  /* ── GET BRAND CODE HELPER ── */
+  function getBrandCode(brand) {
+    if (!brand) return 'UNK';
+    var clean = brand.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+    var words = clean.split(' ').filter(Boolean);
+    if (words.length >= 3) {
+      return (words[0][0] + words[1][0] + words[2][0]).slice(0, 3);
+    } else if (words.length === 2) {
+      return (words[0].slice(0, 2) + words[1][0]).slice(0, 3);
+    } else {
+      return words[0].slice(0, 3).padEnd(3, 'X');
+    }
+  }
+
+  /* ── AUTO-SEQUENCE: find next number for a given CAT-SUBCAT-BRAND ── */
+  function nextSeq(items,catCode,subCode,brandCode){
+    var prefix=catCode+'-'+subCode+'-'+(brandCode || 'UNK')+'-';
     var max=0;
     items.forEach(function(i){
       if(i.sku&&i.sku.indexOf(prefix)===0){
@@ -196,8 +210,10 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
-    var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub);
-    $('sku-preview').textContent=cat+'-'+sub+'-'+String(parseInt(seq)||1).padStart(3,'0');
+    var brandName=$('sku-brand').value || '';
+    var brandCode=getBrandCode(brandName);
+    var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub,brandCode);
+    $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+String(parseInt(seq)||1).padStart(3,'0');
   }
 
   /* ── CATEGORY CHANGE ── */
@@ -219,7 +235,7 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);

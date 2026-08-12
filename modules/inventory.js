@@ -848,6 +848,52 @@ async function saveInventoryItemForm(e) {
   };
 
   if (!window.__inventoryCache) window.__inventoryCache = [];
+
+  // AVCO Weighted Average Cost Recalculation
+  try {
+    let skus = [];
+    if (window.makerAPI && window.makerAPI.readData) {
+      skus = await window.makerAPI.readData('sku.json') || [];
+    }
+    const skuItem = skus.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase());
+    if (skuItem) {
+      const existingIdx = window.__inventoryCache.findIndex(x => x.id === id);
+      const oldQty = existingIdx >= 0 ? Number(window.__inventoryCache[existingIdx].qty || 0) : 0;
+      const addedQty = qty - oldQty;
+
+      if (addedQty > 0) {
+        const otherLotsQty = window.__inventoryCache.reduce((sum, item) => {
+          if (item.id !== id && item.sku && item.sku.toLowerCase() === sku.toLowerCase()) {
+            return sum + Number(item.qty || 0);
+          }
+          return sum;
+        }, 0);
+        const currentTotalQty = otherLotsQty + oldQty;
+        const currentSkuCost = Number(skuItem.cost || 0);
+
+        if (currentTotalQty > 0 && currentSkuCost > 0) {
+          const totalValue = (currentTotalQty * currentSkuCost) + (addedQty * cost);
+          const newTotalQty = currentTotalQty + addedQty;
+          skuItem.cost = Number((totalValue / newTotalQty).toFixed(2));
+        } else {
+          skuItem.cost = cost;
+        }
+
+        await window.makerAPI.writeData('sku.json', skus);
+
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Sku', [
+            skuItem.id, skuItem.sku, skuItem.name, skuItem.cat || '', skuItem.subcat || '',
+            skuItem.brand || '', skuItem.cost, skuItem.price || 0, skuItem.cogs || 0, skuItem.retail || 0,
+            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || ''
+          ]);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('AVCO Cost Engine Error:', err);
+  }
+
   const idx = window.__inventoryCache.findIndex(x => x.id === id);
   if (idx >= 0) {
     window.__inventoryCache[idx] = itemObj;

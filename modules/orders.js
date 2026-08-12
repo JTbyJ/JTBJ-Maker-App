@@ -133,6 +133,8 @@
                 <button type="button" class="btn btn-secondary" id="o-item-add">Add</button>
               </div>
 
+              <div id="o-stock-warning" style="display:none; margin-bottom:12px; width:100%;"></div>
+
               <div class="table-wrap" style="flex:1;min-height:160px;margin-bottom:14px">
                 <table>
                   <thead><tr><th>Product Name</th><th>Qty</th><th>Price</th><th>Total</th><th style="width:40px"></th></tr></thead>
@@ -166,7 +168,94 @@
     load();
   };
 
+  async function checkOrderStock() {
+    var pId = g('o-item-sel').value;
+    var orderQty = parseInt(g('o-item-qty').value) || 0;
+    var warningEl = g('o-stock-warning');
+    if (!warningEl) return;
+
+    if (!pId || orderQty <= 0) {
+      warningEl.style.display = 'none';
+      return;
+    }
+
+    var prod = prodList.find(x => x.id === pId);
+    if (!prod || !prod.bom || prod.bom.length === 0) {
+      warningEl.style.display = 'none';
+      return;
+    }
+
+    let inventory = [];
+    try { inventory = window.__inventoryCache || await window.makerAPI.readData('inventory.json') || []; } catch(e){}
+
+    let issues = [];
+    prod.bom.forEach(bomItem => {
+      const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
+      const available = invItem ? Number(invItem.qty || 0) : 0;
+      const required = (bomItem.qty || 1) * orderQty;
+      if (available < required) {
+        issues.push({
+          sku: bomItem.itemId,
+          name: bomItem.name,
+          available: available,
+          required: required,
+          invId: invItem ? invItem.id : null
+        });
+      }
+    });
+
+    if (issues.length > 0) {
+      let html = '<div style="background:rgba(255,82,82,0.1); border:1px solid var(--red); border-radius:8px; padding:10px; width:100%;">';
+      issues.forEach(issue => {
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:12px; color:var(--red);">` +
+          `<span>⚠️ Stock Deficient: <strong>${issue.name}</strong> (${issue.available} available, need ${issue.required.toFixed(1)})</span>` +
+          (issue.invId ? `<button type="button" class="btn btn-ghost btn-sm reorder-btn" style="padding:2px 6px; font-size:10px; color:var(--gold); border-color:var(--gold); cursor:pointer;" data-inv-id="${issue.invId}">➕ Reorder</button>` : '') +
+          `</div>`;
+      });
+      html += '</div>';
+      warningEl.innerHTML = html;
+      warningEl.style.display = 'flex';
+
+      // Wire up reorder button clicks
+      warningEl.querySelectorAll('.reorder-btn').forEach(btn => {
+        btn.addEventListener('click', async function(e) {
+          e.preventDefault();
+          const invId = btn.getAttribute('data-inv-id');
+          if (invId) {
+            let invList = [];
+            try { invList = window.__inventoryCache || await window.makerAPI.readData('inventory.json') || []; } catch(err){}
+            const item = invList.find(x => x.id === invId);
+            if (item) {
+              item.lowStock = Math.max(item.lowStock, Number(item.qty || 0) + 10);
+              window.__inventoryCache = invList;
+              await window.makerAPI.writeData('inventory.json', invList);
+              if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                await window.MAKER_CONFIG.saveToDatabase('Inventory', [
+                  item.id, item.sku, item.name, item.brand || '', item.cat || 'FIL',
+                  item.subcat || '', item.type || '', item.colour || '', item.qty, item.lowStock,
+                  item.diameter || '', item.weight || '', item.printTemp || '', item.bedTemp || '',
+                  item.cost, item.location || '', item.supplier || '', item.notes || '',
+                  item.unitMetric || 'ea', item.metricCapacity || 1
+                ]);
+              }
+              btn.textContent = '✓ Added';
+              btn.disabled = true;
+              btn.style.color = 'var(--green)';
+              btn.style.borderColor = 'var(--green)';
+            }
+          }
+        });
+      });
+    } else {
+      warningEl.style.display = 'none';
+    }
+  }
+
   function setupEvents(){
+    // Listen for product catalog selection changes or quantity input to check stock level in real-time
+    g('o-item-sel').addEventListener('change', checkOrderStock);
+    g('o-item-qty').addEventListener('input', checkOrderStock);
+
     g('ord-sync-btn').addEventListener('click', async function() {
       g('ord-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:20px;">Syncing orders with Google Sheets...</td></tr>';
       await load();

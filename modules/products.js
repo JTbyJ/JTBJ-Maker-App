@@ -51,6 +51,7 @@ window.__productsCache = null;
         <div style="display:flex;gap:10px;margin-bottom:14px">
           <button class="btn btn-primary" id="prod-tab-list-btn">Product Directory</button>
           <button class="btn btn-ghost" id="prod-tab-form-btn">Add New Product</button>
+          <button class="btn btn-ghost" id="prod-tab-analytics-btn">📈 Cost Impact Analytics</button>
         </div>
 
         <!-- LIST TAB -->
@@ -137,6 +138,9 @@ window.__productsCache = null;
                 <div class="field" style="width:110px">
                   <label id="p-bom-qty-label">Qty Required</label><input type="number" id="p-bom-qty" step="any" value="1">
                 </div>
+                <div class="field" style="width:80px">
+                  <label>Wastage %</label><input type="number" id="p-bom-waste" min="0" value="0" step="any">
+                </div>
                 <button type="button" class="btn btn-secondary" id="p-bom-add-btn">Add</button>
               </div>
 
@@ -159,6 +163,49 @@ window.__productsCache = null;
               </div>
             </div>
           </form>
+        </div>
+
+        <!-- ANALYTICS TAB -->
+        <div id="prod-tab-analytics" style="display:none">
+          <div class="card" style="margin-bottom: 20px;">
+            <h3 style="color:var(--teal); margin-bottom:8px;">📊 Dynamic Cost Shift Matrix</h3>
+            <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">Simulate price fluctuations of raw materials and immediately inspect profit margins and COGS shifts across your product catalog.</p>
+
+            <div style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px; background:rgba(0,0,0,0.15); padding:16px; border-radius:10px; border:1px solid var(--border);">
+              <div class="field" style="width:250px;">
+                <label>Select Raw Material / SKU</label>
+                <select id="an-material-select" style="width:100%;"></select>
+              </div>
+              <div class="field" style="width:140px;">
+                <label>Simulated Price Shift</label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="number" id="an-shift-percent" value="10" step="any" style="width:80px;">
+                  <span style="font-weight:700; color:var(--gold);">%</span>
+                </div>
+              </div>
+              <button type="button" class="btn btn-teal" id="an-simulate-btn">Simulate Impact</button>
+              <button type="button" class="btn btn-ghost" id="an-reset-btn">Reset Simulation</button>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product Name</th>
+                    <th>Current COGS</th>
+                    <th>Simulated COGS</th>
+                    <th>COGS Shift</th>
+                    <th>Current Margin</th>
+                    <th>Simulated Margin</th>
+                    <th>Margin Shift</th>
+                  </tr>
+                </thead>
+                <tbody id="an-matrix-tbody">
+                  <tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Select a material above to simulate pricing impacts.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <!-- AI SEO GENERATOR MODAL -->
@@ -218,6 +265,13 @@ window.__productsCache = null;
     g('prod-tab-form-btn').addEventListener('click',function(){
       clearBuildForm();
       switchTab('form');
+    });
+    g('prod-tab-analytics-btn').addEventListener('click',function(){switchTab('analytics');});
+    g('an-simulate-btn').addEventListener('click', runSimulation);
+    g('an-reset-btn').addEventListener('click', function() {
+      g('an-material-select').value = '';
+      g('an-shift-percent').value = '10';
+      g('an-matrix-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Select a material above to simulate pricing impacts.</td></tr>';
     });
 
     // Qty Required Dynamic Metric Label on Selected Item change
@@ -288,6 +342,7 @@ window.__productsCache = null;
     g('p-bom-add-btn').addEventListener('click',function(){
       var id=g('p-bom-item').value;
       var qty=parseFloat(g('p-bom-qty').value)||0;
+      var waste=parseFloat(g('p-bom-waste').value)||0;
       if(!id||qty<=0)return;
       var inv=invList.find(function(x){return x.id===id;});
       if(inv){
@@ -299,16 +354,19 @@ window.__productsCache = null;
         var existing=bomList.find(function(x){return x.itemId===bomIdentifier;});
         if(existing){
           existing.qty+=qty;
+          existing.waste=waste; // Override or keep latest waste %
         }else{
           bomList.push({
             itemId:bomIdentifier,
             name:inv.name,
             qty:qty,
             unitMetric: inv.unitMetric || 'ea',
-            unitCost: calculatedUnitCost
+            unitCost: calculatedUnitCost,
+            waste: waste
           });
         }
         g('p-bom-qty').value='1';
+        g('p-bom-waste').value='0';
         renderBOM();
       }
     });
@@ -364,7 +422,8 @@ window.__productsCache = null;
             name:b.name,
             qty:b.qty,
             unitMetric:b.unitMetric || 'ea',
-            unitCost:b.unitCost
+            unitCost:b.unitCost,
+            waste: b.waste || 0
           };
         }),
         photo:photo
@@ -398,13 +457,118 @@ window.__productsCache = null;
   }
 
   function switchTab(t){
-    if(t==='list'){
-      g('prod-tab-list').style.display='block';g('prod-tab-form').style.display='none';
-      g('prod-tab-list-btn').className='btn btn-primary';g('prod-tab-form-btn').className='btn btn-ghost';
-    }else{
-      g('prod-tab-list').style.display='none';g('prod-tab-form').style.display='block';
-      g('prod-tab-list-btn').className='btn btn-ghost';g('prod-tab-form-btn').className='btn btn-primary';
+    g('prod-tab-list').style.display = t === 'list' ? 'block' : 'none';
+    g('prod-tab-form').style.display = t === 'form' ? 'block' : 'none';
+    g('prod-tab-analytics').style.display = t === 'analytics' ? 'block' : 'none';
+
+    g('prod-tab-list-btn').className = t === 'list' ? 'btn btn-primary' : 'btn btn-ghost';
+    g('prod-tab-form-btn').className = t === 'form' ? 'btn btn-primary' : 'btn btn-ghost';
+    g('prod-tab-analytics-btn').className = t === 'analytics' ? 'btn btn-primary' : 'btn btn-ghost';
+
+    if (t === 'analytics') {
+      populateAnalyticsMaterials();
     }
+  }
+
+  async function populateAnalyticsMaterials() {
+    let skus = [];
+    try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+    const select = g('an-material-select');
+    if (select) {
+      select.innerHTML = '<option value="">-- Select Master SKU --</option>';
+      skus.forEach(s => {
+        select.innerHTML += `<option value="${s.sku}">${s.sku} - ${s.name} ($${Number(s.cost || 0).toFixed(2)})</option>`;
+      });
+    }
+  }
+
+  function runSimulation() {
+    const targetSku = g('an-material-select').value;
+    const shiftPercent = parseFloat(g('an-shift-percent').value) || 0;
+    const tbody = g('an-matrix-tbody');
+    if (!tbody) return;
+
+    if (!targetSku) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Please select a master SKU above.</td></tr>';
+      return;
+    }
+
+    const currentInventory = window.__inventoryCache || [];
+    const skuCatalog = window.__skuCatalogCache || [];
+
+    let affectedProducts = [];
+
+    products.forEach(p => {
+      let usesMaterial = false;
+      let currentMatCost = 0;
+      let simulatedMatCost = 0;
+
+      if (p.bom && Array.isArray(p.bom)) {
+        p.bom.forEach(bomItem => {
+          const invItem = currentInventory.find(x => x.id === bomItem.itemId || x.sku === bomItem.itemId);
+          let uCost = 0;
+          if (invItem) {
+            uCost = Number(invItem.cost || 0) / Number(invItem.metricCapacity || 1);
+          } else {
+            const masterSku = skuCatalog.find(s => s.sku === bomItem.itemId);
+            uCost = masterSku ? Number(masterSku.cost || 0) : Number(bomItem.unitCost || 0);
+          }
+
+          const wastePct = Number(bomItem.waste || 0);
+          const effectiveQty = bomItem.qty * (1 + wastePct / 100);
+
+          currentMatCost += effectiveQty * uCost;
+
+          if (bomItem.itemId === targetSku) {
+            usesMaterial = true;
+            const simUnitCost = uCost * (1 + shiftPercent / 100);
+            simulatedMatCost += effectiveQty * simUnitCost;
+          } else {
+            simulatedMatCost += effectiveQty * uCost;
+          }
+        });
+      }
+
+      if (usesMaterial) {
+        const curCogs = currentMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
+        const simCogs = simulatedMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
+
+        const curMargin = p.salePrice > 0 ? ((p.salePrice - curCogs) / p.salePrice) * 100 : 0;
+        const simMargin = p.salePrice > 0 ? ((p.salePrice - simCogs) / p.salePrice) * 100 : 0;
+
+        affectedProducts.push({
+          name: p.name,
+          sku: p.sku,
+          curCogs: curCogs,
+          simCogs: simCogs,
+          cogsShift: simCogs - curCogs,
+          curMargin: curMargin,
+          simMargin: simMargin,
+          marginShift: simMargin - curMargin
+        });
+      }
+    });
+
+    if (affectedProducts.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">No products currently utilize this master SKU in their BOM.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = affectedProducts.map(p => {
+      const shiftColor = p.cogsShift > 0 ? 'var(--red)' : (p.cogsShift < 0 ? 'var(--green)' : 'var(--muted)');
+      const marginColor = p.marginShift < 0 ? 'var(--red)' : (p.marginShift > 0 ? 'var(--green)' : 'var(--muted)');
+      return `
+        <tr>
+          <td style="font-weight:700;">${p.name} <br><small style="color:var(--muted);">${p.sku}</small></td>
+          <td style="font-family:monospace;">$${p.curCogs.toFixed(2)}</td>
+          <td style="font-family:monospace; font-weight:700;">$${p.simCogs.toFixed(2)}</td>
+          <td style="font-family:monospace; font-weight:700; color:${shiftColor};">${p.cogsShift >= 0 ? '+' : ''}$${p.cogsShift.toFixed(2)}</td>
+          <td style="font-weight:600;">${p.curMargin.toFixed(1)}%</td>
+          <td style="font-weight:700;">${p.simMargin.toFixed(1)}%</td>
+          <td style="font-weight:700; color:${marginColor};">${p.marginShift >= 0 ? '+' : ''}${p.marginShift.toFixed(1)}%</td>
+        </tr>
+      `;
+    }).join('');
   }
 
   async function loadInventory(){
@@ -604,7 +768,8 @@ window.__productsCache = null;
               name:x.name,
               qty:x.qty,
               unitMetric:x.unitMetric || 'ea',
-              unitCost:x.unitCost
+              unitCost:x.unitCost,
+              waste: x.waste || 0
             };
           });
           renderBOM();switchTab('form');
@@ -635,10 +800,14 @@ window.__productsCache = null;
     var tbody=g('p-bom-tbody');if(!tbody)return;
     tbody.innerHTML='';
     bomList.forEach(function(b,idx){
-      var total=b.qty*b.unitCost;
+      var wastePct = Number(b.waste || 0);
+      var effectiveQty = b.qty * (1 + wastePct / 100);
+      var total=effectiveQty*b.unitCost;
       var tr=document.createElement('tr');
       tr.innerHTML=`
-        <td>${b.name} (${b.unitMetric})</td><td>${b.qty}</td><td>$${b.unitCost.toFixed(3)}</td><td>$${total.toFixed(2)}</td>
+        <td>${b.name} (${b.unitMetric})${wastePct > 0 ? `<br><small style="color:var(--gold);">+${wastePct}% waste</small>` : ''}</td>
+        <td>${b.qty}${wastePct > 0 ? `<br><small style="color:var(--gold);">${effectiveQty.toFixed(2)} eff.</small>` : ''}</td>
+        <td>$${b.unitCost.toFixed(3)}</td><td>$${total.toFixed(2)}</td>
         <td><button type="button" class="btn btn-danger btn-sm bomr" style="padding:2px 6px" data-idx="${idx}">×</button></td>
       `;
       tbody.appendChild(tr);
