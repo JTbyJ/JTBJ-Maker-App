@@ -548,6 +548,10 @@ window.__customerCache = null;
 
     window.__customerCache = localData;
     renderCustomerTable(window.__customerCache);
+
+    if (forceRefresh) {
+      alert('🔄 Customers synchronized successfully!\n' + (window.__customerCache ? window.__customerCache.length : 0) + ' entries loaded/updated in the database.');
+    }
   }
 
   function renderCustomerTable(data) {
