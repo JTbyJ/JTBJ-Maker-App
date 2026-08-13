@@ -160,15 +160,15 @@ window.OSOT_CATS = null;
           for (let i = 1; i < rawRows.length; i++) {
             const r = rawRows[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
             if (!idVal) continue;
             let subsObj = {};
             try { subsObj = JSON.parse((subsIdx !== -1 ? r[subsIdx] : '') || '{}'); } catch(e){}
             remoteParsed.push({
               id: idVal,
-              code: codeIdx !== -1 ? r[codeIdx] : '',
-              label: labelIdx !== -1 ? r[labelIdx] : '',
-              color: colorIdx !== -1 ? r[colorIdx] : 'var(--accent)',
+              code: (codeIdx !== -1 ? r[codeIdx] : '') || '',
+              label: (labelIdx !== -1 ? r[labelIdx] : '') || '',
+              color: (colorIdx !== -1 ? r[colorIdx] : '') || 'var(--accent)',
               subs: subsObj
             });
           }

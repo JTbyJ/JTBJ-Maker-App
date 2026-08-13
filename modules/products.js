@@ -833,24 +833,8 @@ window.__productsCache = null;
     products.forEach(function(p){
       if(q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q))return;
 
-      // Recalculate materials dynamically based on live inventory per-unit cost
-      var dynamicMatCost = 0;
-      if (p.bom && Array.isArray(p.bom)) {
-        p.bom.forEach(function(bomItem) {
-          const invItem = currentInventory.find(x => x.sku === bomItem.itemId || x.id === bomItem.itemId);
-          if (invItem) {
-            const cost = Number(invItem.cost || 0);
-            const capacity = Number(invItem.metricCapacity || 1);
-            const liveUnitCost = cost / capacity;
-            dynamicMatCost += bomItem.qty * liveUnitCost;
-          } else {
-            // Fallback to SKU master catalog cost if inventory item doesn't exist/out of stock
-            const masterSku = (window.__skuCatalogCache || []).find(s => s.sku === bomItem.itemId);
-            const baseCost = masterSku ? Number(masterSku.cost || 0) : Number(bomItem.unitCost || 0);
-            dynamicMatCost += bomItem.qty * baseCost;
-          }
-        });
-      }
+      // Recalculate materials dynamically based on live inventory per-unit cost using the Centralized Pricing Engine
+      var dynamicMatCost = window.PricingEngine.getLiveCost(p.bom, window.__skuCatalogCache, currentInventory);
 
       var dynamicCogs = dynamicMatCost + Number(p.labourCost || 0) + Number(p.etsyFee || 0);
       var dynamicMargin = p.salePrice > 0 ? ((p.salePrice - dynamicCogs) / p.salePrice) * 100 : 0;

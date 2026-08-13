@@ -842,7 +842,13 @@ async function saveInventoryItemForm(e) {
   const photo = document.getElementById('inv-form-photo').value.trim();
 
   const itemObj = {
-    id, sku, name, brand, cat, subcat, qty, lowStock, supplier,
+    id,
+    sku,
+    name: sku ? '' : name,
+    brand: sku ? '' : brand,
+    cat: sku ? '' : cat,
+    subcat: sku ? '' : subcat,
+    qty, lowStock, supplier,
     type, colour, location, diameter, weight, printTemp, bedTemp,
     cost, unitMetric, metricCapacity, notes, photo
   };

@@ -3,6 +3,63 @@
  * Path: modules/config.js
  */
 
+window.PricingEngine = {
+  // Method 1: Fetch Live/Current Cost dynamically from SKU catalog and inventory
+  getLiveCost: function(bomItems, skuCatalog, inventoryCache) {
+    let total = 0;
+    if (!bomItems || !Array.isArray(bomItems)) return total;
+    const catalog = skuCatalog || window.__skuCatalogCache || [];
+    const inv = inventoryCache || window.__inventoryCache || [];
+    bomItems.forEach(item => {
+      const invItem = inv.find(x => x.sku === item.itemId || x.id === item.itemId);
+      let unitCost = 0;
+      if (invItem) {
+        const cost = Number(invItem.cost || 0);
+        const capacity = Number(invItem.metricCapacity || 1);
+        unitCost = cost / capacity;
+      } else {
+        const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
+        unitCost = spec ? Number(spec.cost || 0) : Number(item.unitCost || 0);
+      }
+      const qtyWithWaste = item.qty * (1 + (Number(item.waste) || 0) / 100);
+      total += unitCost * qtyWithWaste;
+    });
+    return total;
+  },
+
+  // Method 2: Get Lock-in / Historical Cost
+  getLockedCost: function(bomItems) {
+    let total = 0;
+    if (!bomItems || !Array.isArray(bomItems)) return total;
+    bomItems.forEach(item => {
+      const unitCost = Number(item.unitCost || item.cost || 0);
+      const qtyWithWaste = item.qty * (1 + (Number(item.waste) || 0) / 100);
+      total += unitCost * qtyWithWaste;
+    });
+    return total;
+  },
+
+  // Method 3: Simplified Margin, Labor, Overhead & Taxes Pricing Engine
+  calculateTargetPrice: function(baseCost, laborHours, laborRate, overheadPct, targetMarginPct, taxPct) {
+    const labor = (Number(laborHours) || 0) * (Number(laborRate) || 0);
+    const overhead = ((Number(baseCost) || 0) + labor) * ((Number(overheadPct) || 0) / 100);
+    const totalCost = (Number(baseCost) || 0) + labor + overhead;
+
+    // Profit margin calculation (price = cost / (1 - margin))
+    const marginRatio = (Number(targetMarginPct) || 0) / 100;
+    const priceExcludingTax = marginRatio < 1 ? (totalCost / (1 - marginRatio)) : totalCost;
+    const taxAmount = priceExcludingTax * ((Number(taxPct) || 0) / 100);
+    const finalPrice = priceExcludingTax + taxAmount;
+
+    return {
+      totalCost: totalCost,
+      preTaxPrice: priceExcludingTax,
+      finalPrice: finalPrice,
+      taxAmount: taxAmount
+    };
+  }
+};
+
 window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
   scriptUrl: 'https://script.google.com/macros/s/AKfycbyg6P9qpb-9_fND5zDZezC1jmK_liWUwtfAnyDzQVd22KHIz44WWalGJhkzq3CYPWTG9A/exec',

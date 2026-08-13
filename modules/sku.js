@@ -393,27 +393,27 @@
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
             if (!idVal) continue;
 
             parsedSkus.push({
               id: idVal,
-              sku: skuIdx !== -1 ? r[skuIdx] : '',
-              name: nameIdx !== -1 ? r[nameIdx] : '',
-              cat: catIdx !== -1 ? r[catIdx] : firstCat,
-              subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
-              brand: brandIdx !== -1 ? r[brandIdx] : '',
-              supplier: supplierIdx !== -1 ? r[supplierIdx] : '',
-              variation: varIdx !== -1 ? r[varIdx] : '',
-              varCode: varCodeIdx !== -1 ? r[varCodeIdx] : '',
+              sku: (skuIdx !== -1 ? r[skuIdx] : '') || '',
+              name: (nameIdx !== -1 ? r[nameIdx] : '') || '',
+              cat: (catIdx !== -1 ? r[catIdx] : '') || firstCat,
+              subcat: (subcatIdx !== -1 ? r[subcatIdx] : '') || '',
+              brand: (brandIdx !== -1 ? r[brandIdx] : '') || '',
+              supplier: (supplierIdx !== -1 ? r[supplierIdx] : '') || '',
+              variation: (varIdx !== -1 ? r[varIdx] : '') || '',
+              varCode: (varCodeIdx !== -1 ? r[varCodeIdx] : '') || '',
               cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
               price: priceIdx !== -1 ? (Number(r[priceIdx]) || 0) : 0,
               cogs: cogsIdx !== -1 ? (Number(r[cogsIdx]) || 0) : 0,
               retail: retailIdx !== -1 ? (Number(r[retailIdx]) || 0) : 0,
-              status: statusIdx !== -1 ? r[statusIdx] : 'Active',
-              notes: notesIdx !== -1 ? r[notesIdx] : '',
-              classification: classIdx !== -1 ? r[classIdx] : 'Raw Component / Material (BOM Input)',
-              photo: photoIdx !== -1 ? r[photoIdx] : ''
+              status: (statusIdx !== -1 ? r[statusIdx] : '') || 'Active',
+              notes: (notesIdx !== -1 ? r[notesIdx] : '') || '',
+              classification: (classIdx !== -1 ? r[classIdx] : '') || 'Raw Component / Material (BOM Input)',
+              photo: (photoIdx !== -1 ? r[photoIdx] : '') || ''
             });
           }
 

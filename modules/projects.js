@@ -212,56 +212,69 @@
     var i = items.find(function(x) { return x.id === modalId; });
     if (!i) return;
 
-    if (!confirm('Promote this project prototype "' + i.name + '" to the ready-to-sell Product Catalog?')) return;
+    if (!confirm('Promote this project prototype "' + i.name + '"? You will be prompted to build its official product SKU.')) return;
 
     try {
-      let catalogProds = [];
-      try { catalogProds = await window.makerAPI.readData('products.json') || []; } catch(e){}
-
-      const newProdId = 'prod_' + Date.now();
-      const cleanBOM = (i.bom || []).map(b => ({
-        itemId: b.itemId,
-        name: b.name,
-        qty: b.qty,
-        unitMetric: b.unitMetric || 'ea',
-        unitCost: b.unitCost || 0
-      }));
-
-      const newProdObj = {
-        id: newProdId,
-        name: i.name,
-        category: i.category,
-        sku: 'CAT-' + i.category.substring(0,3).toUpperCase() + '-' + Date.now().toString(36).substring(4).toUpperCase(),
-        status: 'Active',
-        platforms: ['Etsy'],
-        salePrice: Number(i.revenue || 0) || 20.00,
-        etsyFee: 0,
-        description: i.notes || 'Imported experimental design from Project Log.',
-        notes: 'Promoted from Project Prototype ' + i.id,
-        labourHrs: 0.5,
-        labourRate: 20,
-        labourCost: Number(i.labCost || 0),
-        materialCost: Number(i.matCost || 0),
-        cogs: Number(i.matCost || 0) + Number(i.labCost || 0),
-        margin: Number(i.revenue || 0) > 0 ? (((Number(i.revenue || 0) - (Number(i.matCost || 0) + Number(i.labCost || 0))) / Number(i.revenue || 0)) * 100) : 0,
-        bom: cleanBOM
-      };
-
-      catalogProds.unshift(newProdObj);
-      window.__productsCache = catalogProds;
-      await window.makerAPI.writeData('products.json', catalogProds);
-
-      if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-        await window.MAKER_CONFIG.saveToDatabase('Products', [
-          newProdObj.id, newProdObj.name, newProdObj.category, newProdObj.sku, newProdObj.status,
-          JSON.stringify(newProdObj.platforms), newProdObj.salePrice, newProdObj.etsyFee,
-          newProdObj.description, newProdObj.notes, newProdObj.labourHrs, newProdObj.labourRate,
-          newProdObj.labourCost, newProdObj.materialCost, newProdObj.cogs, newProdObj.margin,
-          JSON.stringify(newProdObj.bom)
-        ]);
+      if (!window.openGlobalSkuBuilder) {
+        alert('Global SKU Builder is currently unavailable.');
+        return;
       }
 
-      alert('🚀 Successfully promoted prototype to active Product Catalog! Navigate to the Products tab to view/edit.');
+      window.openGlobalSkuBuilder(async function(newSkuObj) {
+        try {
+          let catalogProds = [];
+          try { catalogProds = await window.makerAPI.readData('products.json') || []; } catch(e){}
+
+          const newProdId = 'prod_' + Date.now();
+          const cleanBOM = (i.bom || []).map(b => ({
+            itemId: b.itemId,
+            name: b.name,
+            qty: b.qty,
+            unitMetric: b.unitMetric || 'ea',
+            unitCost: b.unitCost || 0
+          }));
+
+          const newProdObj = {
+            id: newProdId,
+            name: newSkuObj.name,
+            category: newSkuObj.cat,
+            sku: newSkuObj.sku,
+            status: 'Active',
+            platforms: ['Etsy'],
+            salePrice: newSkuObj.retail || Number(i.revenue || 0) || 20.00,
+            etsyFee: 0,
+            description: i.notes || 'Imported experimental design from Project Log.',
+            notes: 'Promoted from Project Prototype ' + i.id,
+            labourHrs: 0.5,
+            labourRate: 20,
+            labourCost: Number(i.labCost || 0),
+            materialCost: Number(i.matCost || 0),
+            cogs: Number(i.matCost || 0) + Number(i.labCost || 0),
+            margin: Number(i.revenue || 0) > 0 ? (((Number(i.revenue || 0) - (Number(i.matCost || 0) + Number(i.labCost || 0))) / Number(i.revenue || 0)) * 100) : 0,
+            bom: cleanBOM
+          };
+
+          catalogProds.unshift(newProdObj);
+          window.__productsCache = catalogProds;
+          await window.makerAPI.writeData('products.json', catalogProds);
+
+          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            await window.MAKER_CONFIG.saveToDatabase('Products', [
+              newProdObj.id, newProdObj.name, newProdObj.category, newProdObj.sku, newProdObj.status,
+              JSON.stringify(newProdObj.platforms), newProdObj.salePrice, newProdObj.etsyFee,
+              newProdObj.description, newProdObj.notes, newProdObj.labourHrs, newProdObj.labourRate,
+              newProdObj.labourCost, newProdObj.materialCost, newProdObj.cogs, newProdObj.margin,
+              JSON.stringify(newProdObj.bom)
+            ]);
+          }
+
+          if (window.__makerInit_products) window.__makerInit_products();
+          alert('🚀 Successfully promoted prototype to active Product Catalog with SKU ' + newSkuObj.sku + '! Navigate to the Products tab to view/edit.');
+        } catch (innerErr) {
+          console.error('Inner promotion error:', innerErr);
+          alert('Failed to save promoted Product Catalog item.');
+        }
+      });
     } catch(err) {
       console.error('Error promoting prototype:', err);
       alert('Failed to promote prototype to Product Catalog.');
@@ -429,7 +442,8 @@
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    var totalMatCost = 0;
+    var totalMatCost = window.PricingEngine.getLiveCost(activeBom, window.__skuCatalogCache, inventory);
+
     activeBom.forEach(function(b, idx) {
       let uCost = Number(b.unitCost || 0);
       if (uCost === 0) {
@@ -441,7 +455,6 @@
       }
 
       var lineTotal = b.qty * uCost;
-      totalMatCost += lineTotal;
 
       var tr = document.createElement('tr');
       tr.innerHTML = '<td>' + esc(b.name) + '</td>'+
