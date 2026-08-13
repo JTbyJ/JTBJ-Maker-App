@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://maps.googleapis.com https://places.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://maps.googleapis.com; img-src 'self' data: https://maps.gstatic.com https://maps.googleapis.com; font-src 'self' https://fonts.gstatic.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://maps.googleapis.com https://places.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://maps.googleapis.com; img-src 'self' data: https: http:; font-src 'self' https://fonts.gstatic.com;" />
   <title>Just Jane Maker Lab</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -116,12 +116,254 @@
       <div class="nav-item" data-panel="suppliers"><span class="nav-icon">◎</span><span class="nav-label">Suppliers</span></div>
       <div class="nav-item" data-panel="assets"><span class="nav-icon">&#9632;</span><span class="nav-label">Assets &amp; Accounts</span></div>
     </div>
-    <div id="sidebar-footer"><span>⚡</span><span id="ver-label">v1.0.0</span></div>
+    <div id="sidebar-footer"><span>⚡</span><span id="ver-label">v2.1.0</span></div>
   </nav>
 
   <div id="main">
     <div id="topbar"><div id="topbar-title">Dashboard</div><div id="topbar-date"></div></div>
     
+    <!-- MASTER APP LIGHTBOX MODAL (Shared across all tabs) -->
+    <div id="photo-lightbox" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100000; align-items:center; justify-content:center; cursor:pointer;" onclick="this.style.display='none'">
+      <img id="lightbox-img" style="max-width:90%; max-height:90%; border-radius:8px; border:3px solid #fff; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+    </div>
+
+    <script>
+      window.getDirectPhotoUrl = function(url) {
+        if (!url) return '';
+        url = url.trim();
+        if (url.includes('drive.google.com')) {
+          let id = '';
+          const dMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+          if (dMatch && dMatch[1]) {
+            id = dMatch[1];
+          } else {
+            const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (idMatch && idMatch[1]) {
+              id = idMatch[1];
+            }
+          }
+          if (id) {
+            return 'https://lh3.googleusercontent.com/d/' + id;
+          }
+        }
+        return url;
+      };
+
+      window.openPhotoLightbox = function(url) {
+        const lightbox = document.getElementById('photo-lightbox');
+        const img = document.getElementById('lightbox-img');
+        if (lightbox && img) {
+          img.src = window.getDirectPhotoUrl(url);
+          lightbox.style.display = 'flex';
+        }
+      };
+
+      function getGBrandCode(brand) {
+        if (!brand) return 'UNK';
+        var clean = brand.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+        var words = clean.split(' ').filter(Boolean);
+        if (words.length >= 3) {
+          return (words[0][0] + words[1][0] + words[2][0]).slice(0, 3);
+        } else if (words.length === 2) {
+          return (words[0].slice(0, 2) + words[1][0]).slice(0, 3);
+        } else {
+          return words[0].slice(0, 3).padEnd(3, 'X');
+        }
+      }
+
+      async function getGNextSeq(catCode, subCode, brandCode) {
+        let skus = [];
+        try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+        var prefix = catCode + '-' + subCode + '-' + (brandCode || 'UNK') + '-';
+        var max = 0;
+        skus.forEach(function(i) {
+          if (i.sku && i.sku.indexOf(prefix) === 0) {
+            var num = parseInt(i.sku.replace(prefix, ''));
+            if (num > max) max = num;
+          }
+        });
+        return String(max + 1).padStart(3, '0');
+      }
+
+      window.activeGlobalSkuCallback = null;
+
+      window.openGlobalSkuBuilder = function(callback) {
+        window.activeGlobalSkuCallback = callback;
+
+        const cats = window.OSOT_CATS || {};
+        const catSelect = document.getElementById('g-sku-cat');
+        if (catSelect) {
+          catSelect.innerHTML = '';
+          Object.keys(cats).forEach(code => {
+            const opt = document.createElement('option');
+            opt.value = code;
+            opt.textContent = code + ' - ' + cats[code].label;
+            catSelect.appendChild(opt);
+          });
+        }
+
+        window.onGlobalSkuCatChange();
+
+        document.getElementById('g-sku-brand').value = '';
+        document.getElementById('g-sku-pname').value = '';
+        document.getElementById('g-sku-cost').value = '0.00';
+        document.getElementById('g-sku-retail').value = '0.00';
+
+        document.getElementById('global-sku-modal').style.display = 'flex';
+        window.updateGlobalSkuPreview();
+      };
+
+      window.closeGlobalSkuBuilder = function() {
+        document.getElementById('global-sku-modal').style.display = 'none';
+      };
+
+      window.onGlobalSkuCatChange = function() {
+        const cats = window.OSOT_CATS || {};
+        const catVal = document.getElementById('g-sku-cat').value;
+        const subcatSelect = document.getElementById('g-sku-subcat');
+        if (subcatSelect) {
+          subcatSelect.innerHTML = '';
+          if (catVal && cats[catVal] && cats[catVal].subs) {
+            Object.keys(cats[catVal].subs).forEach(sub => {
+              const opt = document.createElement('option');
+              opt.value = sub;
+              opt.textContent = sub + ' - ' + cats[catVal].subs[sub];
+              subcatSelect.appendChild(opt);
+            });
+          }
+        }
+        window.updateGlobalSkuPreview();
+      };
+
+      window.updateGlobalSkuPreview = async function() {
+        const catEl = document.getElementById('g-sku-cat');
+        const subcatEl = document.getElementById('g-sku-subcat');
+        const catVal = catEl ? (catEl.value || 'FIL') : 'FIL';
+        const subcatVal = subcatEl ? (subcatEl.value || 'PLA') : 'PLA';
+        const brandVal = document.getElementById('g-sku-brand').value;
+        const brandCode = getGBrandCode(brandVal);
+        const seq = await getGNextSeq(catVal, subcatVal, brandCode);
+        const previewEl = document.getElementById('g-sku-preview');
+        if (previewEl) {
+          previewEl.textContent = catVal + '-' + subcatVal + '-' + brandCode + '-' + seq;
+        }
+      };
+
+      window.saveGlobalSkuBuilder = async function() {
+        const catVal = document.getElementById('g-sku-cat').value || 'FIL';
+        const subcatVal = document.getElementById('g-sku-subcat').value || 'PLA';
+        const brandVal = document.getElementById('g-sku-brand').value.trim();
+        const brandCode = getGBrandCode(brandVal);
+        const seq = await getGNextSeq(catVal, subcatVal, brandCode);
+        const finalSku = catVal + '-' + subcatVal + '-' + brandCode + '-' + seq;
+        const pname = document.getElementById('g-sku-pname').value.trim();
+        const classification = document.getElementById('g-sku-class').value;
+        const cost = Number(document.getElementById('g-sku-cost').value) || 0;
+        const retail = Number(document.getElementById('g-sku-retail').value) || 0;
+
+        if (!pname) {
+          alert('Please enter a Product Name.');
+          return;
+        }
+
+        let skus = [];
+        try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+
+        const skuId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const newSku = {
+          id: skuId,
+          sku: finalSku,
+          name: pname,
+          cat: catVal,
+          subcat: subcatVal,
+          brand: brandVal,
+          cost: cost,
+          price: 0,
+          cogs: 0,
+          retail: retail,
+          status: 'Active',
+          notes: 'Created on-the-fly globally',
+          classification: classification
+        };
+
+        skus.unshift(newSku);
+        await window.makerAPI.writeData('sku.json', skus);
+
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          await window.MAKER_CONFIG.saveToDatabase('Sku', [
+            skuId, finalSku, pname, catVal, subcatVal, brandVal, cost, 0, 0, retail, 'Active', 'Created on-the-fly globally', classification
+          ]);
+        }
+
+        if (window.activeGlobalSkuCallback) {
+          window.activeGlobalSkuCallback(newSku);
+        }
+
+        if (window.__makerInit_sku) window.__makerInit_sku();
+        if (window.__makerInit_inventory) window.__makerInit_inventory();
+
+        window.closeGlobalSkuBuilder();
+      };
+    </script>
+
+    <!-- GLOBAL SKU BUILDER MODAL -->
+    <div id="global-sku-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:100000; align-items:center; justify-content:center; padding:16px;">
+      <div style="background:var(--surface, #1e293b); border:2px solid var(--accent, #3b82f6); border-radius:12px; width:100%; max-width:500px; padding:20px; box-shadow:0 10px 25px rgba(0,0,0,0.5); color:var(--text, #f8fafc); overflow-y:auto; max-height:90vh;">
+        <h3 style="margin-bottom:12px; color:var(--accent, #3b82f6);">⚡ Create New SKU on the Fly</h3>
+
+        <div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px; text-align:center; margin-bottom:16px;">
+          <div style="font-size:10px; color:#64748b; font-weight:700;">LIVE PREVIEW</div>
+          <div id="g-sku-preview" style="font-family:monospace; font-size:20px; font-weight:900; color:var(--accent, #3b82f6); margin-top:4px; letter-spacing:1px;">FIL-PLA-UNK-001</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">CATEGORY</label>
+            <select id="g-sku-cat" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px; font-weight:700;" onchange="window.onGlobalSkuCatChange()"></select>
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">SUB-CATEGORY</label>
+            <select id="g-sku-subcat" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px; font-weight:700;" onchange="window.updateGlobalSkuPreview()"></select>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">BRAND</label>
+            <input type="text" id="g-sku-brand" placeholder="e.g. Creality" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;" oninput="window.updateGlobalSkuPreview()">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">CLASSIFICATION</label>
+            <select id="g-sku-class" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;">
+              <option>Raw Component / Material (BOM Input)</option>
+              <option>Finished Product / Sales Catalog</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">PRODUCT NAME</label>
+          <input type="text" id="g-sku-pname" placeholder="e.g. Matte PLA Red" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;">
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">UNIT COST (CAD)</label>
+            <input type="number" id="g-sku-cost" step="0.01" value="0.00" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">RETAIL PRICE (CAD)</label>
+            <input type="number" id="g-sku-retail" step="0.01" value="0.00" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;">
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button class="btn" style="background:#475569; color:#f8fafc;" onclick="window.closeGlobalSkuBuilder()">Cancel</button>
+          <button class="btn" style="background:var(--accent, #3b82f6); color:#fff;" onclick="window.saveGlobalSkuBuilder()">Save SKU</button>
+        </div>
+      </div>
+    </div>
+
     <div id="module-frame">
       <!-- CUSTOMERS MODULE PANEL -->
       <div id="panel-customers" class="module-panel">
@@ -171,10 +413,25 @@
   const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',categories:'Category Manager',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
 'customers': 'Customers',
 'orders': 'Orders'};
-  function activatePanel(id){
-    if(window['__makerInit_'+id])window['__makerInit_'+id]();
+  async function activatePanel(id){
+    if(window['__makerInit_'+id]) {
+      try {
+        await window['__makerInit_'+id]();
+      } catch(e) {
+        console.error('Error initializing panel ' + id, e);
+      }
+    }
     document.querySelectorAll('.module-panel').forEach(p=>p.classList.remove('active'));
-    const t=document.getElementById('panel-'+id);if(t)t.classList.add('active');
+    const t=document.getElementById('panel-'+id);
+    if(t) {
+      t.classList.add('active');
+      setTimeout(() => {
+        const editable = t.querySelector('input:not([type="hidden"]):not([readonly]), select:not([disabled]), textarea:not([readonly])');
+        if (editable) {
+          editable.focus();
+        }
+      }, 100);
+    }
     navItems.forEach(n=>n.classList.toggle('active',n.dataset.panel===id));
     titleEl.textContent=LABELS[id]||id;
   }
