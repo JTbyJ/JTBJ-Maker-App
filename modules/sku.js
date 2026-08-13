@@ -220,6 +220,7 @@
   frame.appendChild(panel);
 
   var items=[],editId=null;
+  var customBrands = []; // Additional brands entered by user locally
   function $(id){return document.getElementById(id);}
 
   /* ── PREVIEW BUILDER ── */
@@ -428,6 +429,7 @@
       items=await window.makerAPI.readData(FILE)||[];
     }
 
+    populateBrandsDropdown();
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
