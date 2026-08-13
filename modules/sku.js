@@ -25,9 +25,23 @@
     OSOT_CATS = window.OSOT_CATS || OSOT_CATS;
   }
 
-  /* ── AUTO-SEQUENCE: find next number for a given CAT-SUBCAT ── */
-  function nextSeq(items,catCode,subCode){
-    var prefix=catCode+'-'+subCode+'-';
+  /* ── GET BRAND CODE HELPER ── */
+  function getBrandCode(brand) {
+    if (!brand) return 'UNK';
+    var clean = brand.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+    var words = clean.split(' ').filter(Boolean);
+    if (words.length >= 3) {
+      return (words[0][0] + words[1][0] + words[2][0]).slice(0, 3);
+    } else if (words.length === 2) {
+      return (words[0].slice(0, 2) + words[1][0]).slice(0, 3);
+    } else {
+      return words[0].slice(0, 3).padEnd(3, 'X');
+    }
+  }
+
+  /* ── AUTO-SEQUENCE: find next number for a given CAT-SUBCAT-BRAND ── */
+  function nextSeq(items,catCode,subCode,brandCode){
+    var prefix=catCode+'-'+subCode+'-'+(brandCode || 'UNK')+'-';
     var max=0;
     items.forEach(function(i){
       if(i.sku&&i.sku.indexOf(prefix)===0){
@@ -76,6 +90,7 @@
       .replace(/"/g, '&quot;');
   }
 
+
   /* ── PANEL HTML ── */
   panel.innerHTML=
     '<style>' +
@@ -88,7 +103,13 @@
     '    z-index: 99999 !important;' +
     '  }' +
     '</style>' +
-    '<div class="page-header"><h2>SKU Builder</h2><p>Generate and manage product SKUs &mdash; CATEGORY-SUBCATEGORY-SEQUENCE</p></div>'+
+    '<div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">' +
+    '  <div>' +
+    '    <h2>SKU Builder</h2>' +
+    '    <p>Generate and manage product SKUs &mdash; CATEGORY-SUBCATEGORY-SEQUENCE</p>' +
+    '  </div>' +
+    '  <button class="btn btn-ghost" id="sku-sync-btn">🔄 Sync</button>' +
+    '</div>' +
 
     '<div class="stat-row">'+
       '<div class="stat-box"><div class="sv" style="color:var(--accent)" id="sku-total">0</div><div class="sl">Total SKUs</div></div>'+
@@ -103,28 +124,36 @@
       '<div style="background:var(--bg);border:2px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center">'+
         '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">SKU Preview</div>'+
         '<div id="sku-preview" style="font-size:28px;font-weight:900;font-family:monospace;color:var(--accent);letter-spacing:2px">FIL-PLA-001</div>'+
-        '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Format: CATEGORY-SUBCATEGORY-SEQUENCE</div>'+
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Format: CATEGORY-SUBCATEGORY-SEQUENCE / VARIATION</div>'+
       '</div>'+
 
       /* CATEGORY + SUBCATEGORY SELECTS */
       '<div class="input-row">'+
-        '<div class="field">'+
+        '<div class="field" style="flex:1">'+
           '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">CATEGORY GROUP</label><button type="button" class="btn btn-ghost btn-sm" data-goto="categories" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>'+
           '<select id="sku-catgroup" style="font-family:monospace;font-weight:700">'+
             buildCatOptions('FIL')+
           '</select>'+
         '</div>'+
-        '<div class="field">'+
+        '<div class="field" style="flex:1">'+
           '<label>SUB-CATEGORY CODE</label>'+
           '<select id="sku-subcat" style="font-family:monospace;font-weight:700">'+
             buildSubcatOptions('FIL','PLA')+
           '</select>'+
         '</div>'+
-        '<div class="field">'+
-          '<label>SEQUENCE #</label>'+
-          '<input id="sku-seq" value="001" placeholder="001" style="font-family:monospace;font-weight:700;width:80px">'+
+        '<div class="field" style="flex:1.5">'+
+          '<label>Variation (e.g. Colour)</label>'+
+          '<input id="sku-var-name" placeholder="e.g. Black" style="font-weight:700">'+
         '</div>'+
-        '<div class="field">'+
+        '<div class="field" style="width:100px">'+
+          '<label>Var Code</label>'+
+          '<input id="sku-var-code" placeholder="BLK" style="font-family:monospace;font-weight:700">'+
+        '</div>'+
+        '<div class="field" style="width:100px" id="sku-seq-field-container">'+
+          '<label>SEQUENCE #</label>'+
+          '<input id="sku-seq" value="001" placeholder="001" style="font-family:monospace;font-weight:700">'+
+        '</div>'+
+        '<div class="field" style="flex:1.5">'+
           '<label>Custom Override SKU</label>'+
           '<input id="sku-custom" placeholder="Leave blank to auto-build" style="font-family:monospace">'+
         '</div>'+
@@ -134,8 +163,12 @@
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
         '<div class="field" style="flex:1">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand/Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
-          '<select id="sku-brand" style="font-weight:600;"><option value="">Select Supplier...</option></select>'+
+          '<label>Brand / Manufacturer</label>'+
+          '<input id="sku-brand-input" placeholder="e.g. Creality" style="font-weight:600;">'+
+        '</div>'+
+        '<div class="field" style="flex:1">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
+          '<select id="sku-supplier-select" style="font-weight:600;"><option value="">Select Supplier...</option></select>'+
         '</div>'+
         '<div class="field" style="flex:1"><label>Classification</label><select id="sku-classification"><option>Raw Component / Material (BOM Input)</option><option>Finished Sellable Product (Etsy/Custom)</option></select></div>'+
         '<div class="field" style="flex:1"><label>Status</label><select id="sku-status"><option>Active</option><option>Draft</option><option>Discontinued</option></select></div>'+
@@ -154,6 +187,7 @@
 
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Description / Notes</label><input id="sku-notes" placeholder="e.g. 11oz sublimation mug, white poly-coated"></div>'+
+        '<div class="field" style="flex:2"><label>Photo URL / Image Link (Google Drive Share Link)</label><input id="sku-photo" placeholder="e.g. https://drive.google.com/file/d/.../view?usp=sharing"></div>'+
       '</div>'+
 
       '<div style="display:flex;gap:8px;margin-top:10px">'+
@@ -179,8 +213,9 @@
       '</select>'+
     '</div>'+
     '<div class="table-wrap"><table><thead><tr>'+
-      '<th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand/Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
-    '</tr></thead><tbody id="sku-tbody"></tbody></table></div>';
+      '<th>Photo</th><th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand</th><th>Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
+    '</tr></thead><tbody id="sku-tbody"></tbody></table></div>' +
+    '';
 
   frame.appendChild(panel);
 
@@ -193,8 +228,24 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
-    var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub);
-    $('sku-preview').textContent=cat+'-'+sub+'-'+String(parseInt(seq)||1).padStart(3,'0');
+    var brandName=$('sku-brand-input').value || '';
+    var brandCode=getBrandCode(brandName);
+    var varCode=($('sku-var-code').value || '').trim().toUpperCase();
+
+    if (varCode) {
+      if ($('sku-seq-field-container')) $('sku-seq-field-container').style.opacity = '0.4';
+      $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+varCode;
+    } else {
+      if ($('sku-seq-field-container')) $('sku-seq-field-container').style.opacity = '1';
+      var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub,brandCode);
+      $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+String(parseInt(seq)||1).padStart(3,'0');
+    }
+  }
+
+  function onVarNameInput() {
+    var varName = $('sku-var-name').value;
+    $('sku-var-code').value = getBrandCode(varName);
+    buildPreview();
   }
 
   /* ── CATEGORY CHANGE ── */
@@ -216,14 +267,18 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-input','sku-var-code'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);
       el.addEventListener('change',id==='sku-catgroup'?onCatGroupChange:buildPreview);
     }
   });
+  if ($('sku-var-name')) {
+    $('sku-var-name').addEventListener('input', onVarNameInput);
+  }
   ['sku-cost','sku-price'].forEach(function(id){$(id).addEventListener('input',calcMargin);});
+
 
   /* ── LOAD SUPPLIERS ── */
   async function loadSuppliers(){
@@ -240,9 +295,9 @@
         html += '<option value="' + name + '">' + name + '</option>';
       });
     }
-    var brandSelect = $('sku-brand');
-    if (brandSelect) {
-      brandSelect.innerHTML = html;
+    var supplierSelect = $('sku-supplier-select');
+    if (supplierSelect) {
+      supplierSelect.innerHTML = html;
     }
   }
 
@@ -264,7 +319,10 @@
             name: item.name || 'Unnamed Item',
             cat: item.cat || 'FIL',
             subcat: item.subcat || '',
-            brand: item.supplier || item.brand || '',
+            brand: item.brand || '',
+            supplier: item.supplier || '',
+            variation: item.colour || '',
+            varCode: '',
             cost: Number(item.cost) || 0,
             price: 0,
             cogs: 0,
@@ -281,7 +339,8 @@
             var rowArray = [
               newSku.id, newSku.sku, newSku.name, newSku.cat, newSku.subcat,
               newSku.brand, newSku.cost, newSku.price, newSku.cogs, newSku.retail,
-              newSku.status, newSku.notes, newSku.classification
+              newSku.status, newSku.notes, newSku.classification, '',
+              newSku.supplier, newSku.variation, newSku.varCode
             ];
             window.MAKER_CONFIG.saveToDatabase('Sku', rowArray);
           }
@@ -309,23 +368,55 @@
       if (fetchFunc) {
         const remoteData = await fetchFunc('Sku');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-          const startIndex = (remoteData[0] && (remoteData[0][0] === 'ID' || remoteData[0][0] === 'id')) ? 1 : 0;
-          items = remoteData.slice(startIndex).map(row => ({
-            id: row[0] || '',
-            sku: row[1] || '',
-            name: row[2] || '',
-            cat: row[3] || firstCat,
-            subcat: row[4] || '',
-            brand: row[5] || '',
-            cost: Number(row[6]) || 0,
-            price: Number(row[7]) || 0,
-            cogs: Number(row[8]) || 0,
-            retail: Number(row[9]) || 0,
-            status: row[10] || 'Active',
-            notes: row[11] || '',
-            classification: row[12] || 'Raw Component / Material (BOM Input)'
-          })).filter(x => x.sku && x.status !== 'DELETED');
+          const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'sku_id' || h.includes('id'));
+          const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
+          const nameIdx = header.findIndex(h => h === 'name' || h === 'product name' || h.includes('name'));
+          const catIdx = header.findIndex(h => h === 'cat' || h === 'category' || h.includes('cat'));
+          const subcatIdx = header.findIndex(h => h === 'subcat' || h === 'subcategory' || h.includes('subcat'));
+          const brandIdx = header.findIndex(h => h === 'brand' || h === 'brand/supplier' || h.includes('brand') || h.includes('supplier'));
+          const costIdx = header.findIndex(h => h === 'cost' || h.includes('cost'));
+          const priceIdx = header.findIndex(h => h === 'price' || h.includes('price'));
+          const cogsIdx = header.findIndex(h => h === 'cogs' || h.includes('cogs'));
+          const retailIdx = header.findIndex(h => h === 'retail' || h === 'retail price' || h.includes('retail'));
+          const statusIdx = header.findIndex(h => h === 'status' || h.includes('status'));
+          const notesIdx = header.findIndex(h => h === 'notes' || h.includes('notes') || h.includes('desc'));
+          const classIdx = header.findIndex(h => h === 'classification' || h.includes('class'));
+          const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
+          const supplierIdx = header.findIndex(h => h === 'supplier' || h.includes('supplier'));
+          const varIdx = header.findIndex(h => h === 'variation' || h.includes('var'));
+          const varCodeIdx = header.findIndex(h => h === 'varcode' || h === 'variation_code' || h.includes('varcode'));
+
+          const parsedSkus = [];
+          for (let i = 1; i < remoteData.length; i++) {
+            const r = remoteData[i];
+            if (!r || r.length === 0) continue;
+            const idVal = idIdx !== -1 ? r[idIdx] : '';
+            if (!idVal) continue;
+
+            parsedSkus.push({
+              id: idVal,
+              sku: skuIdx !== -1 ? r[skuIdx] : '',
+              name: nameIdx !== -1 ? r[nameIdx] : '',
+              cat: catIdx !== -1 ? r[catIdx] : firstCat,
+              subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
+              brand: brandIdx !== -1 ? r[brandIdx] : '',
+              supplier: supplierIdx !== -1 ? r[supplierIdx] : '',
+              variation: varIdx !== -1 ? r[varIdx] : '',
+              varCode: varCodeIdx !== -1 ? r[varCodeIdx] : '',
+              cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
+              price: priceIdx !== -1 ? (Number(r[priceIdx]) || 0) : 0,
+              cogs: cogsIdx !== -1 ? (Number(r[cogsIdx]) || 0) : 0,
+              retail: retailIdx !== -1 ? (Number(r[retailIdx]) || 0) : 0,
+              status: statusIdx !== -1 ? r[statusIdx] : 'Active',
+              notes: notesIdx !== -1 ? r[notesIdx] : '',
+              classification: classIdx !== -1 ? r[classIdx] : 'Raw Component / Material (BOM Input)',
+              photo: photoIdx !== -1 ? r[photoIdx] : ''
+            });
+          }
+
+          items = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');
           await sv();
         } else {
           items=await window.makerAPI.readData(FILE)||[];
@@ -378,12 +469,22 @@
       var isRaw = (i.classification || '').includes('Raw');
       var classBadge = isRaw ? '<span class="badge badge-accent">🛠️ Raw</span>' : '<span class="badge badge-teal">🛍️ Etsy</span>';
 
+      var photoCell = '';
+      if (i.photo) {
+        var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(i.photo) : i.photo;
+        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))">';
+      } else {
+        photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
+      }
+
       return '<tr>'+
+        '<td>' + photoCell + '</td>' +
         '<td style="font-family:monospace;font-weight:700;color:var(--accent)">'+i.sku+'</td>'+
         '<td style="font-weight:600">'+escapeHtml(i.name)+'</td>'+
         '<td>'+classBadge+'</td>'+
         '<td>'+catBadge+'<br><span style="font-size:11px;color:var(--text-muted)">'+(i.subcat?escapeHtml(i.subcat):'')+'</span></td>'+
         '<td>'+escapeHtml(i.brand||'—')+'</td>'+
+        '<td>'+escapeHtml(i.supplier||'—')+'</td>'+
         '<td>$'+Number(i.cost||0).toFixed(2)+'</td>'+
         '<td>$'+Number(i.price||0).toFixed(2)+'</td>'+
         '<td>$'+Number(i.cogs||0).toFixed(2)+'</td>'+
@@ -395,7 +496,7 @@
           '<button class="btn btn-danger btn-sm skud" data-id="'+i.id+'">Del</button>'+
         '</td>'+
       '</tr>';
-    }).join(''):'<tr><td colspan="12" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
+    }).join(''):'<tr><td colspan="14" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
 
     /* Edit buttons */
     panel.querySelectorAll('.skue').forEach(function(b){
@@ -406,8 +507,11 @@
         $('sku-catgroup').value=i.cat || Object.keys(OSOT_CATS)[0];
         $('sku-subcat').innerHTML=buildSubcatOptions(i.cat || Object.keys(OSOT_CATS)[0], i.subcat || '');
         $('sku-seq').value='';
+        $('sku-var-name').value=i.variation || '';
+        $('sku-var-code').value=i.varCode || '';
         $('sku-pname').value=i.name||'';
-        $('sku-brand').value=i.brand||'';
+        $('sku-brand-input').value=i.brand||'';
+        $('sku-supplier-select').value=i.supplier||'';
         $('sku-classification').value=i.classification || 'Raw Component / Material (BOM Input)';
         $('sku-cost').value=i.cost||'';
         $('sku-price').value=i.price||'';
@@ -415,6 +519,7 @@
         $('sku-retail').value=i.retail||'';
         $('sku-status').value=i.status||'Active';
         $('sku-notes').value=i.notes||'';
+        $('sku-photo').value=i.photo||'';
         buildPreview();calcMargin();
         $('sku-form-title').textContent='Edit SKU';
         $('sku-cancel').style.display='inline-flex';
@@ -449,14 +554,18 @@
       name:name,
       cat:catCode,
       subcat:subCode,
-      brand:$('sku-brand').value,
+      brand:$('sku-brand-input').value.trim(),
+      supplier:$('sku-supplier-select').value,
+      variation:$('sku-var-name').value.trim(),
+      varCode:$('sku-var-code').value.trim().toUpperCase(),
       classification:$('sku-classification').value,
       cost:Number($('sku-cost').value)||0,
       price:Number($('sku-price').value)||0,
       cogs:Number($('sku-cogs').value)||0,
       retail:Number($('sku-retail').value)||0,
       status:$('sku-status').value,
-      notes:$('sku-notes').value.trim()
+      notes:$('sku-notes').value.trim(),
+      photo:$('sku-photo').value.trim()
     };
     if(editId){
       var idx=items.findIndex(function(x){return x.id===editId;});
@@ -470,7 +579,8 @@
       await window.MAKER_CONFIG.saveToDatabase('Sku', [
         obj.id, obj.sku, obj.name, obj.cat, obj.subcat,
         obj.brand, obj.cost, obj.price, obj.cogs, obj.retail,
-        obj.status, obj.notes, obj.classification
+        obj.status, obj.notes, obj.classification, obj.photo,
+        obj.supplier, obj.variation, obj.varCode
       ]);
     }
   });
@@ -481,13 +591,17 @@
     $('sku-cancel').style.display='none';
     $('sku-custom').value='';
     $('sku-pname').value='';
-    $('sku-brand').value='';
+    $('sku-brand-input').value='';
+    $('sku-supplier-select').value='';
+    $('sku-var-name').value='';
+    $('sku-var-code').value='';
     $('sku-classification').value='Raw Component / Material (BOM Input)';
     $('sku-cost').value='';
     $('sku-price').value='';
     $('sku-cogs').value='';
     $('sku-retail').value='';
     $('sku-notes').value='';
+    $('sku-photo').value='';
     $('sku-status').value='Active';
     var defaultCat = Object.keys(OSOT_CATS)[0] || 'FIL';
     var defaultSub = Object.keys((OSOT_CATS[defaultCat] || {subs:{}}).subs)[0] || '';
@@ -505,6 +619,10 @@
   $('sku-cat-filter').addEventListener('change',render);
   $('sku-class-filter').addEventListener('change',render);
   $('sku-stat-filter').addEventListener('change',render);
+  $('sku-sync-btn').addEventListener('click', async function() {
+    $('sku-tbody').innerHTML = '<tr><td colspan="14" class="empty-state"><p>Syncing SKUs with Google Sheets...</p></td></tr>';
+    await load();
+  });
 
   window.__makerInit_sku=load;
 })();
