@@ -150,17 +150,25 @@ window.OSOT_CATS = null;
         const rawRows = await fetchFunc('Categories');
         if (rawRows && Array.isArray(rawRows) && rawRows.length > 0) {
           remoteParsed = [];
-          const startIndex = (rawRows[0] && (rawRows[0][0] === 'ID' || rawRows[0][0] === 'id' || rawRows[0][0] === 'Code')) ? 1 : 0;
-          for (let i = startIndex; i < rawRows.length; i++) {
+          const header = rawRows[0].map(h => String(h || '').trim().toLowerCase());
+          const idIdx = header.findIndex(h => h === 'id' || h === 'category_id' || h.includes('id'));
+          const codeIdx = header.findIndex(h => h === 'code' || h === 'category code' || h.includes('code'));
+          const labelIdx = header.findIndex(h => h === 'label' || h === 'name' || h === 'category name' || h.includes('label'));
+          const colorIdx = header.findIndex(h => h === 'color' || h === 'badge color' || h.includes('color'));
+          const subsIdx = header.findIndex(h => h === 'subs' || h === 'subcategories' || h.includes('subs'));
+
+          for (let i = 1; i < rawRows.length; i++) {
             const r = rawRows[i];
-            if (!r || !r[0]) continue;
+            if (!r || r.length === 0) continue;
+            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
+            if (!idVal) continue;
             let subsObj = {};
-            try { subsObj = JSON.parse(r[4] || '{}'); } catch(e){}
+            try { subsObj = JSON.parse((subsIdx !== -1 ? r[subsIdx] : '') || '{}'); } catch(e){}
             remoteParsed.push({
-              id: r[0] || '',
-              code: r[1] || '',
-              label: r[2] || '',
-              color: r[3] || 'var(--accent)',
+              id: idVal,
+              code: (codeIdx !== -1 ? r[codeIdx] : '') || '',
+              label: (labelIdx !== -1 ? r[labelIdx] : '') || '',
+              color: (colorIdx !== -1 ? r[colorIdx] : '') || 'var(--accent)',
               subs: subsObj
             });
           }

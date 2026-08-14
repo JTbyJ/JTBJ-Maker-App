@@ -3,15 +3,76 @@
  * Path: modules/config.js
  */
 
+window.PricingEngine = {
+  // Method 1: Fetch Live/Current Cost dynamically from SKU catalog and inventory
+  getLiveCost: function(bomItems, skuCatalog, inventoryCache) {
+    let total = 0;
+    if (!bomItems || !Array.isArray(bomItems)) return total;
+    const catalog = skuCatalog || window.__skuCatalogCache || [];
+    const inv = inventoryCache || window.__inventoryCache || [];
+    bomItems.forEach(item => {
+      const invItem = inv.find(x => x.sku === item.itemId || x.id === item.itemId);
+      let unitCost = 0;
+      if (invItem) {
+        const cost = Number(invItem.cost || 0);
+        const capacity = Number(invItem.metricCapacity || 1);
+        unitCost = cost / capacity;
+      } else {
+        const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
+        unitCost = spec ? Number(spec.cost || 0) : Number(item.unitCost || 0);
+      }
+      const qtyWithWaste = item.qty * (1 + (Number(item.waste) || 0) / 100);
+      total += unitCost * qtyWithWaste;
+    });
+    return total;
+  },
+
+  // Method 2: Get Lock-in / Historical Cost
+  getLockedCost: function(bomItems) {
+    let total = 0;
+    if (!bomItems || !Array.isArray(bomItems)) return total;
+    bomItems.forEach(item => {
+      const unitCost = Number(item.unitCost || item.cost || 0);
+      const qtyWithWaste = item.qty * (1 + (Number(item.waste) || 0) / 100);
+      total += unitCost * qtyWithWaste;
+    });
+    return total;
+  },
+
+  // Method 3: Simplified Margin, Labor, Overhead & Taxes Pricing Engine
+  calculateTargetPrice: function(baseCost, laborHours, laborRate, overheadPct, targetMarginPct, taxPct) {
+    const labor = (Number(laborHours) || 0) * (Number(laborRate) || 0);
+    const overhead = ((Number(baseCost) || 0) + labor) * ((Number(overheadPct) || 0) / 100);
+    const totalCost = (Number(baseCost) || 0) + labor + overhead;
+
+    // Profit margin calculation (price = cost / (1 - margin))
+    const marginRatio = (Number(targetMarginPct) || 0) / 100;
+    const priceExcludingTax = marginRatio < 1 ? (totalCost / (1 - marginRatio)) : totalCost;
+    const taxAmount = priceExcludingTax * ((Number(taxPct) || 0) / 100);
+    const finalPrice = priceExcludingTax + taxAmount;
+
+    return {
+      totalCost: totalCost,
+      preTaxPrice: priceExcludingTax,
+      finalPrice: finalPrice,
+      taxAmount: taxAmount
+    };
+  }
+};
+
 window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbxUwtz-AkaMkaE8uXjIc5q5vyUuM8DpnGUBJ65pDOxCiv3rLWvWCPAj_Hcp3znTwC43bw/exec',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbyg6P9qpb-9_fND5zDZezC1jmK_liWUwtfAnyDzQVd22KHIz44WWalGJhkzq3CYPWTG9A/exec',
 
   // Google Maps API Key for Address Autocomplete
   googleMapsApiKey: 'AIzaSyCLr13nWg2vD_PnZpJDtJA7v-hil_VUEBA',
 
+  // Performance-focused client-side sync queue
+  _syncQueue: [],
+  _syncTimeout: null,
+
   /**
-   * Save a single row of data to a specific tab in your Google Sheet
+   * Save a single row of data to a specific tab in your Google Sheet (with automatic debounced parallel batching)
    */
   async saveToDatabase(sheetName, rowArray) {
     if (!this.scriptUrl) {
@@ -19,19 +80,35 @@ window.MAKER_CONFIG = {
       return;
     }
 
-    try {
-      console.log(`[Google Sheets] Sending row to '${sheetName}'...`);
+    this._syncQueue.push({ sheetName, rowArray });
+    console.log(`[Google Sheets] Queued transaction row for '${sheetName}' (Total queued: ${this._syncQueue.length})`);
 
-      const payload = JSON.stringify({ sheet: sheetName, row: rowArray });
-      const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
+    if (this._syncTimeout) clearTimeout(this._syncTimeout);
+    this._syncTimeout = setTimeout(() => this.flushQueue(), 150);
+  },
 
-      // GET requests bypass CORS POST preflight blocks completely in Google Apps Script!
-      await fetch(url, { method: 'GET', mode: 'no-cors' });
+  async flushQueue() {
+    if (this._syncQueue.length === 0) return;
 
-      console.log(`[Google Sheets] Successfully pushed row to '${sheetName}'!`);
-    } catch (err) {
-      console.error(`[Google Sheets] Error saving to '${sheetName}':`, err);
-    }
+    const currentBatch = [...this._syncQueue];
+    this._syncQueue = [];
+    this._syncTimeout = null;
+
+    console.log(`[Google Sheets] Flushing batch of ${currentBatch.length} sync transactions in parallel...`);
+
+    const promises = currentBatch.map(async (tx) => {
+      try {
+        const payload = JSON.stringify({ sheet: tx.sheetName, row: tx.rowArray });
+        const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
+        await fetch(url, { method: 'GET', mode: 'no-cors' });
+        console.log(`[Google Sheets] Batch-synced row to '${tx.sheetName}'!`);
+      } catch (err) {
+        console.error(`[Google Sheets] Error batch-syncing row to '${tx.sheetName}':`, err);
+      }
+    });
+
+    await Promise.all(promises);
+    console.log(`[Google Sheets] Batch sync of ${currentBatch.length} transactions completed!`);
   },
 
   /**
