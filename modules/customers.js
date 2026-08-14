@@ -98,8 +98,8 @@ window.__customerCache = null;
       }
 
       const script = document.createElement('script');
-      // Bootstrap Loader script is standard for Places API (New)
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&callback=__googleMapsInitCallback`;
+      // Bootstrap Loader script is standard for Places API (New) with async loading option
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async&callback=__googleMapsInitCallback`;
       script.async = true;
       script.defer = true;
 

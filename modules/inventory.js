@@ -522,7 +522,7 @@ function renderInventoryTable(items) {
     var photoCell = '';
     if (imageLink) {
       var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(imageLink) : imageLink;
-      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))">`;
+      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))" onerror="this.onerror=null; this.outerHTML='<span style=\x22font-size:18px; color:var(--muted);\x22 title=\x22Image restricted or unavailable\x22>📷</span>';">`;
     } else {
       photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
     }

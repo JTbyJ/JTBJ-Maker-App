@@ -163,7 +163,7 @@
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
         '<div class="field" style="flex:1">'+
-          '<label>Brand / Manufacturer</label>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand / Manufacturer</label><button type="button" class="btn btn-ghost btn-sm" data-goto="brands" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>'+
           '<input id="sku-brand-input" placeholder="e.g. Creality" style="font-weight:600;">'+
         '</div>'+
         '<div class="field" style="flex:1">'+
@@ -474,7 +474,7 @@
       var photoCell = '';
       if (i.photo) {
         var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(i.photo) : i.photo;
-        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))">';
+        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))" onerror="this.onerror=null; this.outerHTML=\'<span style=\\\x22font-size:18px; color:var(--muted);\\\x22 title=\\\x22Image restricted or unavailable\\\x22>📷</span>\';">';
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }
