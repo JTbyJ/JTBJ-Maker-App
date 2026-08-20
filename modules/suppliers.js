@@ -151,15 +151,15 @@ window.__suppliersCache = null;
 
   /* ── INITIALIZATION LOADER ── */
   async function load(forceRefresh = false) {
-    if (!forceRefresh && window.__suppliersCache && Array.isArray(window.__suppliersCache)) {
-      render();
-      return;
-    }
-
     var localData = [];
     try {
       localData = await window.makerAPI.readData(FILE) || [];
     } catch(e) {}
+
+    if (localData && localData.length > 0) {
+      window.__suppliersCache = localData;
+      render();
+    }
 
     try {
       let fetchFunc = null;
@@ -210,6 +210,9 @@ window.__suppliersCache = null;
           window.__suppliersCache = parsedList.filter(x => x.id && x.status !== 'DELETED');
           await window.makerAPI.writeData(FILE, window.__suppliersCache);
           render();
+          if (forceRefresh) {
+            alert('🔄 Suppliers synchronized successfully!\n' + (window.__suppliersCache ? window.__suppliersCache.length : 0) + ' entries loaded/updated in the database.');
+          }
           return;
         }
       }
