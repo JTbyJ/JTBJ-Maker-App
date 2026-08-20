@@ -440,6 +440,9 @@
   navItems.forEach(n=>n.addEventListener('click',()=>activatePanel(n.dataset.panel)));
   document.addEventListener('click',e=>{const c=e.target.closest('[data-goto]');if(c)activatePanel(c.dataset.goto);});
   setTimeout(() => activatePanel('home'), 50);
+  if (window.autoSyncAllDataToSheets) {
+    setTimeout(() => window.autoSyncAllDataToSheets(), 500);
+  }
 })();
 </script>
 </body>
