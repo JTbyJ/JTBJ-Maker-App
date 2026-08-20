@@ -111,6 +111,7 @@
       <div class="nav-item" data-panel="orders"><span class="nav-icon">🧾</span><span class="nav-label">Orders</span></div>
       <div class="nav-item" data-panel="inventory"><span class="nav-icon">▣</span><span class="nav-label">Inventory</span></div>
       <div class="nav-item" data-panel="sku"><span class="nav-icon">◆</span><span class="nav-label">SKU Builder</span></div>
+      <div class="nav-item" data-panel="brands"><span class="nav-icon">🏷️</span><span class="nav-label">Brand Manager</span></div>
       <div class="nav-item" data-panel="categories"><span class="nav-icon">📁</span><span class="nav-label">Category Manager</span></div>
       <div class="nav-item" data-panel="projects"><span class="nav-icon">▤</span><span class="nav-label">Project Log</span></div>
       <div class="nav-item" data-panel="suppliers"><span class="nav-icon">◎</span><span class="nav-label">Suppliers</span></div>
@@ -124,7 +125,7 @@
     
     <!-- MASTER APP LIGHTBOX MODAL (Shared across all tabs) -->
     <div id="photo-lightbox" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100000; align-items:center; justify-content:center; cursor:pointer;" onclick="this.style.display='none'">
-      <img id="lightbox-img" style="max-width:90%; max-height:90%; border-radius:8px; border:3px solid #fff; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+      <img id="lightbox-img" style="max-width:90%; max-height:90%; border-radius:8px; border:3px solid #fff; box-shadow:0 10px 40px rgba(0,0,0,0.5);" onerror="this.onerror=null; alert('Photo is restricted or unavailable. Please check image permissions.'); document.getElementById('photo-lightbox').style.display='none';">
     </div>
 
     <script>
@@ -400,6 +401,7 @@
 <script src="modules/products.js"></script>
 <script src="modules/customers.js"></script>
 <script src="modules/orders.js"></script>
+<script src="modules/brands.js"></script>
 <script src="modules/categories.js"></script>
 
 <script>
@@ -410,7 +412,7 @@
   tick();setInterval(tick,30000);
   const navItems=document.querySelectorAll('.nav-item[data-panel]');
   const titleEl=document.getElementById('topbar-title');
-  const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',categories:'Category Manager',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
+  const LABELS={home:'Dashboard',sublimation:'Sublimation Hub',print3d:'3D Print Hub',recipes:'Recipe Book',checklists:'Checklists',inventory:'Inventory Quick-View',sku:'SKU Builder',brands:'Brand Manager',categories:'Category Manager',projects:'Project Log',suppliers:'Suppliers',laser: 'Laser Hub',assets:'Assets & Accounts','products': 'Products',
 'customers': 'Customers',
 'orders': 'Orders'};
   async function activatePanel(id){
@@ -438,6 +440,9 @@
   navItems.forEach(n=>n.addEventListener('click',()=>activatePanel(n.dataset.panel)));
   document.addEventListener('click',e=>{const c=e.target.closest('[data-goto]');if(c)activatePanel(c.dataset.goto);});
   setTimeout(() => activatePanel('home'), 50);
+  if (window.autoSyncAllDataToSheets) {
+    setTimeout(() => window.autoSyncAllDataToSheets(), 500);
+  }
 })();
 </script>
 </body>
