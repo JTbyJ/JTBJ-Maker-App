@@ -62,7 +62,7 @@ window.PricingEngine = {
 
 window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbyg6P9qpb-9_fND5zDZezC1jmK_liWUwtfAnyDzQVd22KHIz44WWalGJhkzq3CYPWTG9A/exec',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbzpObs8-mFfHb_TUWVDwJfx7iBvxmLTnnE0seAm8fplvTloxE7CLXkgvEc2RHXlt_hFtw/exec',
 
   // Google Maps API Key for Address Autocomplete
   googleMapsApiKey: 'AIzaSyCLr13nWg2vD_PnZpJDtJA7v-hil_VUEBA',

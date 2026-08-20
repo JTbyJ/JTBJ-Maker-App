@@ -370,7 +370,9 @@
         const remoteData = await fetchFunc('Sku');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
           const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
-          const idIdx = header.findIndex(h => h === 'id' || h === 'sku_id' || h.includes('id'));
+          let idIdx = header.findIndex(h => h === 'id' || h === 'sku_id' || h === 'item_id');
+          if (idIdx === -1) idIdx = header.findIndex(h => h === 'sku');
+          if (idIdx === -1) idIdx = 0;
           const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
           const nameIdx = header.findIndex(h => h === 'name' || h === 'product name' || h.includes('name'));
           const catIdx = header.findIndex(h => h === 'cat' || h === 'category' || h.includes('cat'));
