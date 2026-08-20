@@ -69,8 +69,8 @@ window.OSOT_CATS = null;
               <div class="field" style="margin-bottom:12px;">
                 <label>Badge Color (CSS color or Hex)</label>
                 <div style="display:flex; gap:8px;">
-                  <input type="text" id="cat-color" required placeholder="e.g. var(--accent) or #e040fb" style="flex:1;">
-                  <input type="color" id="cat-color-picker" style="width:40px; padding:0; cursor:pointer;" oninput="g('cat-color').value = this.value">
+                  <input type="text" id="cat-color" required placeholder="e.g. var(--accent) or #e040fb" style="flex:1;" oninput="if(this.value.startsWith('#')) g('cat-color-picker').value = this.value">
+                  <input type="color" id="cat-color-picker" value="#e040fb" style="width:40px; height:38px; padding:2px; cursor:pointer; background:var(--surface); border:1px solid var(--border); border-radius:6px;" oninput="g('cat-color').value = this.value" onchange="g('cat-color').value = this.value">
                 </div>
               </div>
               <div class="field" style="margin-bottom:18px;">
