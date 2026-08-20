@@ -62,7 +62,7 @@ window.PricingEngine = {
 
 window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbyg6P9qpb-9_fND5zDZezC1jmK_liWUwtfAnyDzQVd22KHIz44WWalGJhkzq3CYPWTG9A/exec',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbzpObs8-mFfHb_TUWVDwJfx7iBvxmLTnnE0seAm8fplvTloxE7CLXkgvEc2RHXlt_hFtw/exec',
 
   // Google Maps API Key for Address Autocomplete
   googleMapsApiKey: 'AIzaSyCLr13nWg2vD_PnZpJDtJA7v-hil_VUEBA',
@@ -140,7 +140,8 @@ window.MAKER_CONFIG = {
       'products.json',
       'orders.json',
       'sku.json',
-      'categories.json'
+      'categories.json',
+      'brands.json'
     ];
 
     function filenameToTabName(filename) {
@@ -160,6 +161,60 @@ window.MAKER_CONFIG = {
       
       return filename.replace('.json', '').split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('_');
     }
+
+    /**
+     * Auto-seeding / Auto-sync engine:
+     * Reads local JSON caches and automatically syncs any local records missing from remote Google Sheets tabs.
+     */
+    window.autoSyncAllDataToSheets = async function() {
+      if (!window.MAKER_CONFIG || !window.MAKER_CONFIG.scriptUrl || !window.makerAPI) return;
+
+      console.log('[AutoSync] Checking local JSON data for Google Sheets synchronization...');
+
+      const syncTargets = [
+        { file: 'sku.json', tab: 'Sku', idKey: 'id', toRow: item => [item.id || '', item.sku || '', item.name || '', item.cat || '', item.subcat || '', item.brand || '', item.cost || 0, item.price || 0, item.cogs || 0, item.retail || 0, item.status || 'Active', item.notes || '', item.classification || '', item.photo || '', item.supplier || '', item.variation || '', item.varCode || ''] },
+        { file: 'inventory.json', tab: 'Inventory', idKey: 'id', toRow: item => [item.id || '', item.sku || '', item.name || '', item.brand || '', item.cat || '', item.subcat || '', item.type || '', item.colour || '', item.qty || 0, item.lowStock || 2, item.diameter || '', item.weight || '', item.printTemp || '', item.bedTemp || '', item.cost || 0, item.location || '', item.supplier || '', item.notes || '', item.unitMetric || 'ea', item.metricCapacity || 1, item.photo || ''] },
+        { file: 'customers.json', tab: 'Customers', idKey: 'id', toRow: item => [item.id || '', item.name || '', item.email || '', item.phone || '', item.address || '', item.finishPref || '', item.igHandle || '', item.type || 'Personal', item.notes || '', item.createdAt || ''] },
+        { file: 'suppliers.json', tab: 'Suppliers', idKey: 'id', toRow: item => [item.id || '', item.name || '', item.category || '', item.status || 'Active', item.rating || 5, item.website || '', item.contact || '', item.email || '', item.phone || '', item.lead || '', item.minOrder || '', item.shipping || '', item.notes || ''] },
+        { file: 'products.json', tab: 'Products', idKey: 'id', toRow: item => [item.id || '', item.name || '', item.category || '', item.sku || '', item.status || 'Active', JSON.stringify(item.platforms || []), item.salePrice || 0, item.etsyFee || 0, item.description || '', item.notes || '', item.labourHrs || 0, item.labourRate || 0, item.labourCost || 0, item.materialCost || 0, item.cogs || 0, item.margin || 0, JSON.stringify(item.bom || []), item.photo || ''] },
+        { file: 'orders.json', tab: 'Orders', idKey: 'id', toRow: item => [item.id || '', item.orderNumber || '', item.date || '', item.source || '', item.status || '', item.paymentStatus || '', item.customerId || '', item.customerName || '', item.notes || '', JSON.stringify(item.items || []), item.subtotal || 0, item.shipping || 0, item.total || 0, item.cogs || 0, item.profit || 0, item.externalId || ''] },
+        { file: 'categories.json', tab: 'Categories', idKey: 'id', toRow: item => [item.id || '', item.code || '', item.label || '', item.color || '', JSON.stringify(item.subs || {})] },
+        { file: 'brands.json', tab: 'Brands', idKey: 'id', toRow: item => [item.id || '', item.name || '', item.code || '', item.website || '', item.status || 'Active', item.notes || ''] }
+      ];
+
+      for (const target of syncTargets) {
+        try {
+          const localItems = await originalMakerAPI.readData(target.file);
+          if (!localItems || !Array.isArray(localItems) || localItems.length === 0) continue;
+
+          const remoteRows = await window.MAKER_CONFIG.fetchFromDatabase(target.tab);
+          const remoteIds = new Set();
+          if (remoteRows && Array.isArray(remoteRows) && remoteRows.length > 0) {
+            for (let i = 1; i < remoteRows.length; i++) {
+              if (remoteRows[i] && remoteRows[i][0]) {
+                remoteIds.add(String(remoteRows[i][0]).trim());
+              }
+            }
+          }
+
+          let seededCount = 0;
+          for (const item of localItems) {
+            const itemId = String(item[target.idKey] || item.id || '').trim();
+            if (itemId && !remoteIds.has(itemId) && item.status !== 'DELETED') {
+              const rowArray = target.toRow(item);
+              await window.MAKER_CONFIG.saveToDatabase(target.tab, rowArray);
+              seededCount++;
+            }
+          }
+
+          if (seededCount > 0) {
+            console.log(`[AutoSync] Auto-seeded ${seededCount} missing records to '${target.tab}' tab in Google Sheets.`);
+          }
+        } catch (err) {
+          console.error(`[AutoSync] Error syncing ${target.file}:`, err);
+        }
+      }
+    };
 
     window.makerAPI = Object.assign({}, originalMakerAPI, {
       async readData(filename) {
