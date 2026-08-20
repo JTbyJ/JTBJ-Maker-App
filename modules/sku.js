@@ -164,7 +164,7 @@
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
         '<div class="field" style="flex:1">'+
           '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand / Manufacturer</label><button type="button" class="btn btn-ghost btn-sm" data-goto="brands" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>'+
-          '<input id="sku-brand-input" placeholder="e.g. Creality" style="font-weight:600;">'+
+          '<select id="sku-brand-select" style="font-weight:600;"><option value="">Select Brand...</option></select>'+
         '</div>'+
         '<div class="field" style="flex:1">'+
           '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
@@ -229,8 +229,11 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
-    var brandName=$('sku-brand-input').value || '';
-    var brandCode=getBrandCode(brandName);
+    var brandSelect=$('sku-brand-select');
+    var brandName=brandSelect ? brandSelect.value : '';
+    // Check if brand exists in cache to retrieve explicit 3-letter code
+    var brandObj = (window.__brandsCache || []).find(b => b.name === brandName);
+    var brandCode = brandObj && brandObj.code ? brandObj.code : getBrandCode(brandName);
     var varCode=($('sku-var-code').value || '').trim().toUpperCase();
 
     if (varCode) {
@@ -268,7 +271,7 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-input','sku-var-code'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-select','sku-var-code'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);
@@ -431,7 +434,9 @@
       items=await window.makerAPI.readData(FILE)||[];
     }
 
-    populateBrandsDropdown();
+    if (window.populateBrandsDropdown) {
+      window.populateBrandsDropdown('sku-brand-select');
+    }
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
@@ -476,7 +481,7 @@
       var photoCell = '';
       if (i.photo) {
         var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(i.photo) : i.photo;
-        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))" onerror="this.onerror=null; this.outerHTML=\'<span style=\\\x22font-size:18px; color:var(--muted);\\\x22 title=\\\x22Image restricted or unavailable\\\x22>📷</span>\';">';
+        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))" onerror="this.onerror=null; this.outerHTML=\'<span style=&quot;font-size:18px; color:var(--muted);&quot; title=&quot;Image restricted or unavailable&quot;>📷</span>\';">';
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }
@@ -514,7 +519,8 @@
         $('sku-var-name').value=i.variation || '';
         $('sku-var-code').value=i.varCode || '';
         $('sku-pname').value=i.name||'';
-        $('sku-brand-input').value=i.brand||'';
+        if (window.populateBrandsDropdown) window.populateBrandsDropdown('sku-brand-select', i.brand || '');
+        $('sku-brand-select').value=i.brand||'';
         $('sku-supplier-select').value=i.supplier||'';
         $('sku-classification').value=i.classification || 'Raw Component / Material (BOM Input)';
         $('sku-cost').value=i.cost||'';
@@ -558,7 +564,7 @@
       name:name,
       cat:catCode,
       subcat:subCode,
-      brand:$('sku-brand-input').value.trim(),
+      brand:$('sku-brand-select').value,
       supplier:$('sku-supplier-select').value,
       variation:$('sku-var-name').value.trim(),
       varCode:$('sku-var-code').value.trim().toUpperCase(),
@@ -595,7 +601,8 @@
     $('sku-cancel').style.display='none';
     $('sku-custom').value='';
     $('sku-pname').value='';
-    $('sku-brand-input').value='';
+    if (window.populateBrandsDropdown) window.populateBrandsDropdown('sku-brand-select', '');
+    $('sku-brand-select').value='';
     $('sku-supplier-select').value='';
     $('sku-var-name').value='';
     $('sku-var-code').value='';

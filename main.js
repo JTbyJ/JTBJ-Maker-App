@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
@@ -17,6 +17,40 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.once('ready-to-show', () => { mainWindow.show(); mainWindow.maximize(); });
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  // Native Context Menu for text inputs, textareas, and spelling suggestions
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    const template = [];
+
+    // Spelling suggestions if mispelled
+    if (params.dictionarySuggestions && params.dictionarySuggestions.length > 0) {
+      params.dictionarySuggestions.forEach((suggestion) => {
+        template.push({
+          label: suggestion,
+          click: () => mainWindow.webContents.insertText(suggestion)
+        });
+      });
+      template.push({ type: 'separator' });
+    }
+
+    if (params.isEditable) {
+      template.push(
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      );
+    } else if (params.selectionText && params.selectionText.trim() !== '') {
+      template.push({ role: 'copy' });
+    }
+
+    if (template.length > 0) {
+      Menu.buildFromTemplate(template).popup({ window: mainWindow, x: params.x, y: params.y });
+    }
+  });
 }
 
 app.whenReady().then(() => {

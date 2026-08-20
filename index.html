@@ -427,12 +427,15 @@
     const t=document.getElementById('panel-'+id);
     if(t) {
       t.classList.add('active');
-      setTimeout(() => {
-        const editable = t.querySelector('input:not([type="hidden"]):not([readonly]), select:not([disabled]), textarea:not([readonly])');
+      const focusFirst = () => {
+        const editable = t.querySelector('input:not([type="hidden"]):not([readonly]):not([disabled]), select:not([disabled]), textarea:not([readonly]):not([disabled])');
         if (editable) {
           editable.focus();
+          if (editable.select && editable.tagName === 'INPUT') editable.select();
         }
-      }, 100);
+      };
+      setTimeout(focusFirst, 50);
+      setTimeout(focusFirst, 200);
     }
     navItems.forEach(n=>n.classList.toggle('active',n.dataset.panel===id));
     titleEl.textContent=LABELS[id]||id;
