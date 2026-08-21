@@ -503,15 +503,17 @@ window.__suppliersCache = null;
 
   function formatPhoneNumber(phone) {
     if (!phone) return '';
-    const digits = String(phone).replace(/\D/g, '');
+    const str = String(phone).trim();
+    if (str.startsWith('#ERROR!')) return '';
+    const digits = str.replace(/\D/g, '');
     if (digits.length === 10) {
-      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
     } else if (digits.length === 11 && digits.startsWith('1')) {
-      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+      return `1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
     } else if (digits.length > 0) {
-      return `+${digits}`;
+      return digits;
     }
-    return phone;
+    return str.replace(/^\+/, '');
   }
 
   window.__makerInit_suppliers = load;

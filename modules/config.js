@@ -94,20 +94,27 @@ window.MAKER_CONFIG = {
     this._syncQueue = [];
     this._syncTimeout = null;
 
-    console.log(`[Google Sheets] Flushing batch of ${currentBatch.length} sync transactions in parallel...`);
+    console.log(`[Google Sheets] Flushing batch of ${currentBatch.length} sync transactions in chunked parallel batches...`);
 
-    const promises = currentBatch.map(async (tx) => {
-      try {
-        const payload = JSON.stringify({ sheet: tx.sheetName, row: tx.rowArray });
-        const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
-        await fetch(url, { method: 'GET', mode: 'no-cors' });
-        console.log(`[Google Sheets] Batch-synced row to '${tx.sheetName}'!`);
-      } catch (err) {
-        console.error(`[Google Sheets] Error batch-syncing row to '${tx.sheetName}':`, err);
+    const chunkSize = 4;
+    for (let i = 0; i < currentBatch.length; i += chunkSize) {
+      const chunk = currentBatch.slice(i, i + chunkSize);
+      const promises = chunk.map(async (tx) => {
+        try {
+          const payload = JSON.stringify({ sheet: tx.sheetName, row: tx.rowArray });
+          const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
+          await fetch(url, { method: 'GET', mode: 'no-cors' });
+          console.log(`[Google Sheets] Batch-synced row to '${tx.sheetName}'!`);
+        } catch (err) {
+          console.error(`[Google Sheets] Error batch-syncing row to '${tx.sheetName}':`, err);
+        }
+      });
+      await Promise.all(promises);
+      if (i + chunkSize < currentBatch.length) {
+        await new Promise(r => setTimeout(r, 100));
       }
-    });
+    }
 
-    await Promise.all(promises);
     console.log(`[Google Sheets] Batch sync of ${currentBatch.length} transactions completed!`);
   },
 
@@ -188,23 +195,111 @@ window.MAKER_CONFIG = {
       };
 
       const seedConfigs = [
-        { file: 'suppliers.json', tab: 'Suppliers', mapFn: item => [item.id, item.name, item.category, item.status, item.rating, item.website, item.contact, item.email, item.phone, item.lead, item.minOrder, item.shipping, item.notes] },
-        { file: 'customers.json', tab: 'Customers', mapFn: item => [item.id, item.name, item.email, item.phone, item.address, item.finishPreference, item.instagram, item.type, item.notes, item.createdAt] },
-        { file: 'inventory.json', tab: 'Inventory', mapFn: item => [item.id, item.sku, item.name, item.brand, item.category, item.subcategory, item.type, item.colour, item.qty, item.lowStock, item.diameter, item.weight, item.printTemp, item.bedTemp, item.cost, item.location, item.supplier, item.notes, item.unitMetric, item.metricCapacity, item.photo] },
-        { file: 'sku.json', tab: 'Sku', mapFn: item => [item.id, item.sku, item.name, item.cat, item.subcat, item.brand, item.cost, item.price, item.cogs, item.retail, item.status, item.notes, item.classification, item.photo] },
-        { file: 'products.json', tab: 'Products', mapFn: item => [item.id, item.name, item.category, item.sku, item.status, item.platforms ? JSON.stringify(item.platforms) : '', item.saleprice, item.etsyfee, item.description, item.notes, item.labourhrs, item.labourrate, item.labourcost, item.materialcost, item.cogs, item.margin, item.bom ? JSON.stringify(item.bom) : '[]', item.photo] },
-        { file: 'orders.json', tab: 'Orders', mapFn: item => [item.id, item.orderNumber, item.date, item.source, item.status, item.paymentStatus, item.customerId, item.customerName, item.notes, item.lineItems ? JSON.stringify(item.lineItems) : '[]', item.subtotal, item.shipping, item.total, item.cogs, item.profit, item.externalId] },
-        { file: 'categories.json', tab: 'Categories', mapFn: item => [item.id, item.code, item.label, item.color, item.subs ? JSON.stringify(item.subs) : '{}'] },
-        { file: 'brands.json', tab: 'Brands', mapFn: item => [item.id, item.name, item.code, item.website, item.status, item.notes] }
+        {
+          file: 'suppliers.json',
+          cacheKey: '__suppliersCache',
+          tab: 'Suppliers',
+          mapFn: item => [
+            item.id, item.name, item.category, item.status, item.rating, item.website, item.contact, item.email,
+            item.phone ? String(item.phone).replace(/^\+/, '') : '',
+            item.lead, item.minOrder || item.min || '', item.shipping, item.notes
+          ]
+        },
+        {
+          file: 'customers.json',
+          cacheKey: '__customerCache',
+          tab: 'Customers',
+          mapFn: item => [
+            item.id, item.name, item.email,
+            item.phone ? String(item.phone).replace(/^\+/, '') : '',
+            item.address,
+            item.finishPref || item.finish_preference || item.finishPreference || '',
+            item.igHandle || item.instagram_handle || item.instagram || '',
+            item.type || item.customer_type || 'Personal',
+            item.notes,
+            item.createdAt || item.created_at || new Date().toISOString().slice(0, 10)
+          ]
+        },
+        {
+          file: 'inventory.json',
+          cacheKey: '__inventoryCache',
+          tab: 'Inventory',
+          mapFn: item => [
+            item.id, item.sku, item.name, item.brand, item.category || item.cat || '', item.subcategory || item.subcat || '',
+            item.type, item.colour || item.color || '', item.qty, item.lowStock, item.diameter, item.weight,
+            item.printTemp, item.bedTemp, item.cost, item.location, item.supplier, item.notes,
+            item.unitMetric || 'ea', item.metricCapacity || 1, item.photo || ''
+          ]
+        },
+        {
+          file: 'sku.json',
+          cacheKey: '__skuCatalogCache',
+          tab: 'Sku',
+          mapFn: item => [
+            item.id, item.sku, item.name, item.cat, item.subcat, item.brand, item.cost, item.price,
+            item.cogs, item.retail, item.status, item.notes, item.classification, item.photo || ''
+          ]
+        },
+        {
+          file: 'products.json',
+          cacheKey: '__productsCache',
+          tab: 'Products',
+          mapFn: item => [
+            item.id, item.name, item.category, item.sku, item.status,
+            item.platforms ? JSON.stringify(item.platforms) : '[]',
+            item.saleprice || item.salePrice || 0,
+            item.etsyfee || item.etsyFee || 0,
+            item.description || '', item.notes || '',
+            item.labourhrs || item.labourHrs || 0,
+            item.labourrate || item.labourRate || 20,
+            item.labourcost || item.labourCost || 0,
+            item.materialcost || item.materialCost || 0,
+            item.cogs || 0, item.margin || 0,
+            item.bom ? JSON.stringify(item.bom) : '[]',
+            item.photo || ''
+          ]
+        },
+        {
+          file: 'orders.json',
+          cacheKey: '__ordersCache',
+          tab: 'Orders',
+          mapFn: item => [
+            item.id, item.orderNumber || item.ordernumber || '', item.date || '', item.source || '',
+            item.status || '', item.paymentStatus || item.paymentstatus || '',
+            item.customerId || item.customerid || '', item.customerName || item.customername || '',
+            item.notes || '', item.lineItems ? JSON.stringify(item.lineItems) : '[]',
+            item.subtotal || 0, item.shipping || 0, item.total || 0, item.cogs || 0, item.profit || 0,
+            item.externalId || item.externalid || ''
+          ]
+        },
+        {
+          file: 'categories.json',
+          cacheKey: 'OSOT_CATS',
+          tab: 'Categories',
+          mapFn: item => [item.id, item.code, item.label, item.color, item.subs ? JSON.stringify(item.subs) : '{}']
+        },
+        {
+          file: 'brands.json',
+          cacheKey: '__brandsCache',
+          tab: 'Brands',
+          mapFn: item => [item.id, item.name, item.code, item.website, item.status, item.notes]
+        }
       ];
 
       let totalSynced = 0;
 
       for (const cfg of seedConfigs) {
         try {
-          let localData = await window.makerAPI.readData(cfg.file) || [];
-          if (localData && Array.isArray(localData) && localData.length > 0) {
-            for (const item of localData) {
+          let sourceData = [];
+          if (cfg.cacheKey && window[cfg.cacheKey]) {
+            sourceData = Array.isArray(window[cfg.cacheKey]) ? window[cfg.cacheKey] : (typeof window[cfg.cacheKey] === 'object' ? Object.values(window[cfg.cacheKey]) : []);
+          }
+          if (!sourceData || sourceData.length === 0) {
+            sourceData = await window.makerAPI.readData(cfg.file) || [];
+          }
+
+          if (sourceData && Array.isArray(sourceData) && sourceData.length > 0) {
+            for (const item of sourceData) {
               const row = cfg.mapFn(item);
               if (row && row[0]) {
                 await window.MAKER_CONFIG.saveToDatabase(cfg.tab, row);
