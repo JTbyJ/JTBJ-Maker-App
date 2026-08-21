@@ -62,7 +62,7 @@ window.PricingEngine = {
 
 window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbyg6P9qpb-9_fND5zDZezC1jmK_liWUwtfAnyDzQVd22KHIz44WWalGJhkzq3CYPWTG9A/exec',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbzpObs8-mFfHb_TUWVDwJfx7iBvxmLTnnE0seAm8fplvTloxE7CLXkgvEc2RHXlt_hFtw/exec',
 
   // Google Maps API Key for Address Autocomplete
   googleMapsApiKey: 'AIzaSyCLr13nWg2vD_PnZpJDtJA7v-hil_VUEBA',
@@ -140,7 +140,8 @@ window.MAKER_CONFIG = {
       'products.json',
       'orders.json',
       'sku.json',
-      'categories.json'
+      'categories.json',
+      'brands.json'
     ];
 
     function filenameToTabName(filename) {
@@ -160,6 +161,36 @@ window.MAKER_CONFIG = {
       
       return filename.replace('.json', '').split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('_');
     }
+
+    /**
+     * Auto-seeding / Auto-sync engine:
+     * Reads local JSON caches and automatically syncs any local records missing from remote Google Sheets tabs.
+     */
+    window.autoSyncAllDataToSheets = async function() {
+      if (!window.MAKER_CONFIG || !window.MAKER_CONFIG.scriptUrl || !window.makerAPI) return;
+
+      console.log('[AutoSync] Checking bidirectional synchronization between local JSON and Google Sheets...');
+
+      const syncTargets = [
+        { file: 'suppliers.json', tab: 'Suppliers', cacheKey: '__suppliersCache', moduleInit: '__makerInit_suppliers' },
+        { file: 'customers.json', tab: 'Customers', cacheKey: '__customerCache', moduleInit: '__makerInit_customers' },
+        { file: 'inventory.json', tab: 'Inventory', cacheKey: '__inventoryCache', moduleInit: 'loadInventory' },
+        { file: 'sku.json', tab: 'Sku', cacheKey: '__skuCatalogCache' },
+        { file: 'products.json', tab: 'Products', cacheKey: '__productsCache' },
+        { file: 'orders.json', tab: 'Orders', cacheKey: '__ordersCache' },
+        { file: 'brands.json', tab: 'Brands', cacheKey: '__brandsCache' }
+      ];
+
+      for (const target of syncTargets) {
+        try {
+          if (typeof window[target.moduleInit] === 'function') {
+            await window[target.moduleInit](false);
+          }
+        } catch (err) {
+          console.error(`[AutoSync] Error running ${target.moduleInit} for ${target.tab}:`, err);
+        }
+      }
+    };
 
     window.makerAPI = Object.assign({}, originalMakerAPI, {
       async readData(filename) {
