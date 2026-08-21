@@ -727,8 +727,11 @@ window.__productsCache = null;
     await loadInventory();
     await populateProductCats();
 
-    // Use in-memory cache if available
-    if (window.__productsCache && Array.isArray(window.__productsCache) && window.__productsCache.length > 0) {
+    var localData = [];
+    try { localData = await window.makerAPI.readData(FILE) || []; } catch(e){}
+
+    // Use in-memory cache if available (unless forceRefresh is requested)
+    if (!forceRefresh && window.__productsCache && Array.isArray(window.__productsCache) && window.__productsCache.length > 0) {
       products = window.__productsCache;
       renderList();
       return;
@@ -766,8 +769,16 @@ window.__productsCache = null;
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
-            if (!idVal) continue;
+            let idVal = idIdx !== -1 ? r[idIdx] : '';
+            const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+            const skuVal = skuIdx !== -1 ? r[skuIdx] : '';
+            if (!idVal && !nameVal && !skuVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'prod_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
 
             let platforms = [];
             const rawPlat = platIdx !== -1 ? r[platIdx] : '';
@@ -779,11 +790,11 @@ window.__productsCache = null;
             const rawBom = bomIdx !== -1 ? r[bomIdx] : '';
             try { bom = JSON.parse(rawBom || '[]'); } catch(e) {}
 
-            parsedProds.push({
+            const itemObj = {
               id: idVal,
-              name: nameIdx !== -1 ? r[nameIdx] : '',
+              name: nameVal,
               category: catIdx !== -1 ? r[catIdx] : '',
-              sku: skuIdx !== -1 ? r[skuIdx] : '',
+              sku: skuVal,
               status: statIdx !== -1 ? r[statIdx] : 'Active',
               platforms: platforms,
               salePrice: priceIdx !== -1 ? (parseFloat(r[priceIdx]) || 0) : 0,
@@ -798,13 +809,49 @@ window.__productsCache = null;
               margin: marginIdx !== -1 ? (parseFloat(r[marginIdx]) || 0) : 0,
               bom: bom,
               photo: photoIdx !== -1 ? r[photoIdx] : ''
-            });
+            };
+            parsedProds.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Products', [
+                itemObj.id, itemObj.name, itemObj.category, itemObj.sku, itemObj.status,
+                JSON.stringify(itemObj.platforms || []), itemObj.salePrice, itemObj.etsyFee,
+                itemObj.description, itemObj.notes, itemObj.labourHrs, itemObj.labourRate,
+                itemObj.labourCost, itemObj.materialCost, itemObj.cogs, itemObj.margin,
+                JSON.stringify(itemObj.bom || []), itemObj.photo
+              ]);
+            }
           }
 
-          products = parsedProds.filter(x => x.id && x.status !== 'DELETED');
+          const validParsed = parsedProds.filter(x => x.id && x.status !== 'DELETED');
+          const combinedMap = new Map();
+          for (const item of validParsed) {
+            combinedMap.set(item.id, item);
+          }
+          if (localData && Array.isArray(localData)) {
+            for (const localItem of localData) {
+              if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.status !== 'DELETED') {
+                combinedMap.set(localItem.id, localItem);
+                if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                  window.MAKER_CONFIG.saveToDatabase('Products', [
+                    localItem.id, localItem.name, localItem.category, localItem.sku, localItem.status,
+                    JSON.stringify(localItem.platforms || []), localItem.salePrice, localItem.etsyFee,
+                    localItem.description, localItem.notes, localItem.labourHrs, localItem.labourRate,
+                    localItem.labourCost, localItem.materialCost, localItem.cogs, localItem.margin,
+                    JSON.stringify(localItem.bom || []), localItem.photo || ''
+                  ]);
+                }
+              }
+            }
+          }
+
+          products = Array.from(combinedMap.values());
           window.__productsCache = products;
           await window.makerAPI.writeData(FILE, products);
           renderList();
+          if (forceRefresh) {
+            alert('🔄 Products synchronized successfully!\n' + products.length + ' entries loaded/updated.');
+          }
           return;
         }
       }
@@ -843,7 +890,7 @@ window.__productsCache = null;
       var photoCell = '';
       if (p.photo) {
         var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(p.photo) : p.photo;
-        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(p.photo)}'))">`;
+        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(p.photo)}'))" onerror="this.onerror=null; this.outerHTML='<span style=\x22font-size:18px; color:var(--muted);\x22 title=\x22Image restricted or unavailable\x22>📷</span>';">`;
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }

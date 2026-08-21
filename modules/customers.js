@@ -17,16 +17,17 @@ window.__customerCache = null;
    */
   function formatPhoneNumber(phone) {
     if (!phone) return '';
-    const digits = String(phone).replace(/\D/g, '');
-    
+    const str = String(phone).trim();
+    if (str.startsWith('#ERROR!')) return '';
+    const digits = str.replace(/\D/g, '');
     if (digits.length === 10) {
-      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
     } else if (digits.length === 11 && digits.startsWith('1')) {
-      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+      return `1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
     } else if (digits.length > 0) {
-      return `+${digits}`;
+      return digits;
     }
-    return phone;
+    return str.replace(/^\+/, '');
   }
 
   /**
@@ -98,8 +99,8 @@ window.__customerCache = null;
       }
 
       const script = document.createElement('script');
-      // Bootstrap Loader script is standard for Places API (New)
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&callback=__googleMapsInitCallback`;
+      // Bootstrap Loader script is standard for Places API (New) with async loading option
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async&callback=__googleMapsInitCallback`;
       script.async = true;
       script.defer = true;
 
@@ -496,12 +497,21 @@ window.__customerCache = null;
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
-            if (!idVal) continue;
-            remoteDataParsed.push({
+            let idVal = idIdx !== -1 ? r[idIdx] : '';
+            const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+            const emailVal = emailIdx !== -1 ? r[emailIdx] : '';
+            if (!idVal && !nameVal && !emailVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'cust_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
-              name: nameIdx !== -1 ? r[nameIdx] : '',
-              email: emailIdx !== -1 ? r[emailIdx] : '',
+              name: nameVal,
+              email: emailVal,
               phone: phoneIdx !== -1 ? formatPhoneNumber(r[phoneIdx]) : '',
               address: addrIdx !== -1 ? r[addrIdx] : '',
               finishPref: finishIdx !== -1 ? r[finishIdx] : '',
@@ -509,36 +519,45 @@ window.__customerCache = null;
               type: typeIdx !== -1 ? r[typeIdx] : 'Personal',
               notes: notesIdx !== -1 ? r[notesIdx] : '',
               createdAt: dateIdx !== -1 ? r[dateIdx] : ''
-            });
+            };
+            remoteDataParsed.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Customers', [
+                itemObj.id, itemObj.name, itemObj.email, formatPhoneNumber(itemObj.phone),
+                itemObj.address, itemObj.finishPref, itemObj.igHandle, itemObj.type,
+                itemObj.notes, itemObj.createdAt
+              ]);
+            }
           }
           remoteDataParsed = remoteDataParsed.filter(c => c.name || c.email);
         }
       }
 
       if (remoteDataParsed !== null) {
-        if (remoteDataParsed.length === 0 && localData.length > 0) {
-          // Seed the remote sheet
-          window.__customerCache = localData;
-          renderCustomerTable(window.__customerCache);
-
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-            for (const cust of localData) {
-              await window.MAKER_CONFIG.saveToDatabase('Customers', [
-                cust.id, cust.name, cust.email, formatPhoneNumber(cust.phone),
-                cust.address, cust.finishPref, cust.igHandle, cust.type,
-                cust.notes, cust.createdAt
-              ]);
+        const combinedMap = new Map();
+        for (const item of remoteDataParsed) {
+          combinedMap.set(item.id, item);
+        }
+        if (localData && Array.isArray(localData)) {
+          for (const localItem of localData) {
+            if (localItem && localItem.id && !combinedMap.has(localItem.id)) {
+              combinedMap.set(localItem.id, localItem);
+              if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                window.MAKER_CONFIG.saveToDatabase('Customers', [
+                  localItem.id, localItem.name, localItem.email, formatPhoneNumber(localItem.phone),
+                  localItem.address, localItem.finishPref, localItem.igHandle, localItem.type,
+                  localItem.notes, localItem.createdAt
+                ]);
+              }
             }
           }
-        } else {
-          window.__customerCache = remoteDataParsed;
-          renderCustomerTable(window.__customerCache);
+        }
 
-          const localStr = JSON.stringify(localData);
-          const remoteStr = JSON.stringify(remoteDataParsed);
-          if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
-            await window.makerAPI.writeData('customers.json', remoteDataParsed);
-          }
+        window.__customerCache = Array.from(combinedMap.values());
+        renderCustomerTable(window.__customerCache);
+        if (window.makerAPI && window.makerAPI.writeData) {
+          await window.makerAPI.writeData('customers.json', window.__customerCache);
         }
         return;
       }

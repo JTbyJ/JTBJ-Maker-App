@@ -62,7 +62,7 @@ window.PricingEngine = {
 
 window.MAKER_CONFIG = {
   // Your Google Apps Script Deployment URL
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbyg6P9qpb-9_fND5zDZezC1jmK_liWUwtfAnyDzQVd22KHIz44WWalGJhkzq3CYPWTG9A/exec',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbzpObs8-mFfHb_TUWVDwJfx7iBvxmLTnnE0seAm8fplvTloxE7CLXkgvEc2RHXlt_hFtw/exec',
 
   // Google Maps API Key for Address Autocomplete
   googleMapsApiKey: 'AIzaSyCLr13nWg2vD_PnZpJDtJA7v-hil_VUEBA',
@@ -94,20 +94,27 @@ window.MAKER_CONFIG = {
     this._syncQueue = [];
     this._syncTimeout = null;
 
-    console.log(`[Google Sheets] Flushing batch of ${currentBatch.length} sync transactions in parallel...`);
+    console.log(`[Google Sheets] Flushing batch of ${currentBatch.length} sync transactions in chunked parallel batches...`);
 
-    const promises = currentBatch.map(async (tx) => {
-      try {
-        const payload = JSON.stringify({ sheet: tx.sheetName, row: tx.rowArray });
-        const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
-        await fetch(url, { method: 'GET', mode: 'no-cors' });
-        console.log(`[Google Sheets] Batch-synced row to '${tx.sheetName}'!`);
-      } catch (err) {
-        console.error(`[Google Sheets] Error batch-syncing row to '${tx.sheetName}':`, err);
+    const chunkSize = 4;
+    for (let i = 0; i < currentBatch.length; i += chunkSize) {
+      const chunk = currentBatch.slice(i, i + chunkSize);
+      const promises = chunk.map(async (tx) => {
+        try {
+          const payload = JSON.stringify({ sheet: tx.sheetName, row: tx.rowArray });
+          const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
+          await fetch(url, { method: 'GET', mode: 'no-cors' });
+          console.log(`[Google Sheets] Batch-synced row to '${tx.sheetName}'!`);
+        } catch (err) {
+          console.error(`[Google Sheets] Error batch-syncing row to '${tx.sheetName}':`, err);
+        }
+      });
+      await Promise.all(promises);
+      if (i + chunkSize < currentBatch.length) {
+        await new Promise(r => setTimeout(r, 100));
       }
-    });
+    }
 
-    await Promise.all(promises);
     console.log(`[Google Sheets] Batch sync of ${currentBatch.length} transactions completed!`);
   },
 
@@ -118,7 +125,7 @@ window.MAKER_CONFIG = {
     if (!this.scriptUrl) return null;
 
     try {
-      const url = `${this.scriptUrl}?sheet=${encodeURIComponent(sheetName)}`;
+      const url = `${this.scriptUrl}?sheet=${encodeURIComponent(sheetName)}&_t=${Date.now()}`;
       const response = await fetch(url);
       const data = await response.json();
       return data;
@@ -140,7 +147,8 @@ window.MAKER_CONFIG = {
       'products.json',
       'orders.json',
       'sku.json',
-      'categories.json'
+      'categories.json',
+      'brands.json'
     ];
 
     function filenameToTabName(filename) {
@@ -160,6 +168,184 @@ window.MAKER_CONFIG = {
       
       return filename.replace('.json', '').split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('_');
     }
+
+    /**
+     * Rebuild and Seed Google Sheets Database Engine:
+     * Enforces correct column headers and uploads all local JSON datasets to Google Sheets.
+     */
+    window.rebuildAndSeedGoogleSheets = async function(showNotice = true) {
+      if (!window.MAKER_CONFIG || !window.MAKER_CONFIG.scriptUrl || !window.makerAPI) return;
+
+      if (showNotice) {
+        const confirmRebuild = confirm("⚡ Rebuild Google Sheets Database?\n\nThis will synchronize all local datasets (Suppliers, Inventory, SKUs, Products, Customers, Orders, Categories, Brands) to your Google Spreadsheet and ensure standard headers are set.");
+        if (!confirmRebuild) return;
+      }
+
+      console.log('[Rebuild] Rebuilding and seeding Google Sheets database...');
+
+      const standardHeaders = {
+        'Suppliers': ['id', 'name', 'category', 'status', 'rating', 'website', 'contact', 'email', 'phone', 'lead', 'min', 'shipping', 'notes'],
+        'Customers': ['id', 'name', 'email', 'phone', 'address', 'finish_preference', 'instagram_handle', 'customer_type', 'notes', 'created_at'],
+        'Inventory': ['id', 'sku', 'name', 'brand', 'cat', 'subcat', 'type', 'colour', 'qty', 'lowStock', 'diameter', 'weight', 'printTemp', 'bedTemp', 'cost', 'location', 'supplier', 'notes', 'unitMetric', 'metricCapacity', 'photo'],
+        'Sku': ['id', 'sku', 'name', 'cat', 'subcat', 'brand', 'cost', 'price', 'cogs', 'retail', 'status', 'notes', 'classification', 'photo'],
+        'Products': ['id', 'name', 'category', 'sku', 'status', 'platforms', 'saleprice', 'etsyfee', 'description', 'notes', 'labourhrs', 'labourrate', 'labourcost', 'materialcost', 'cogs', 'margin', 'bom', 'photo'],
+        'Orders': ['id', 'ordernumber', 'date', 'source', 'status', 'paymentstatus', 'customerid', 'customername', 'notes', 'lineitems', 'subtotal', 'shipping', 'total', 'cogs', 'profit', 'externalid'],
+        'Categories': ['id', 'code', 'label', 'color', 'subs'],
+        'Brands': ['ID', 'Name', 'Code', 'Website', 'Status', 'Notes']
+      };
+
+      const seedConfigs = [
+        {
+          file: 'suppliers.json',
+          cacheKey: '__suppliersCache',
+          tab: 'Suppliers',
+          mapFn: item => [
+            item.id, item.name, item.category, item.status, item.rating, item.website, item.contact, item.email,
+            item.phone ? String(item.phone).replace(/^\+/, '') : '',
+            item.lead, item.minOrder || item.min || '', item.shipping, item.notes
+          ]
+        },
+        {
+          file: 'customers.json',
+          cacheKey: '__customerCache',
+          tab: 'Customers',
+          mapFn: item => [
+            item.id, item.name, item.email,
+            item.phone ? String(item.phone).replace(/^\+/, '') : '',
+            item.address,
+            item.finishPref || item.finish_preference || item.finishPreference || '',
+            item.igHandle || item.instagram_handle || item.instagram || '',
+            item.type || item.customer_type || 'Personal',
+            item.notes,
+            item.createdAt || item.created_at || new Date().toISOString().slice(0, 10)
+          ]
+        },
+        {
+          file: 'inventory.json',
+          cacheKey: '__inventoryCache',
+          tab: 'Inventory',
+          mapFn: item => [
+            item.id, item.sku, item.name, item.brand, item.category || item.cat || '', item.subcategory || item.subcat || '',
+            item.type, item.colour || item.color || '', item.qty, item.lowStock, item.diameter, item.weight,
+            item.printTemp, item.bedTemp, item.cost, item.location, item.supplier, item.notes,
+            item.unitMetric || 'ea', item.metricCapacity || 1, item.photo || ''
+          ]
+        },
+        {
+          file: 'sku.json',
+          cacheKey: '__skuCatalogCache',
+          tab: 'Sku',
+          mapFn: item => [
+            item.id, item.sku, item.name, item.cat, item.subcat, item.brand, item.cost, item.price,
+            item.cogs, item.retail, item.status, item.notes, item.classification, item.photo || ''
+          ]
+        },
+        {
+          file: 'products.json',
+          cacheKey: '__productsCache',
+          tab: 'Products',
+          mapFn: item => [
+            item.id, item.name, item.category, item.sku, item.status,
+            item.platforms ? JSON.stringify(item.platforms) : '[]',
+            item.saleprice || item.salePrice || 0,
+            item.etsyfee || item.etsyFee || 0,
+            item.description || '', item.notes || '',
+            item.labourhrs || item.labourHrs || 0,
+            item.labourrate || item.labourRate || 20,
+            item.labourcost || item.labourCost || 0,
+            item.materialcost || item.materialCost || 0,
+            item.cogs || 0, item.margin || 0,
+            item.bom ? JSON.stringify(item.bom) : '[]',
+            item.photo || ''
+          ]
+        },
+        {
+          file: 'orders.json',
+          cacheKey: '__ordersCache',
+          tab: 'Orders',
+          mapFn: item => [
+            item.id, item.orderNumber || item.ordernumber || '', item.date || '', item.source || '',
+            item.status || '', item.paymentStatus || item.paymentstatus || '',
+            item.customerId || item.customerid || '', item.customerName || item.customername || '',
+            item.notes || '', item.lineItems ? JSON.stringify(item.lineItems) : '[]',
+            item.subtotal || 0, item.shipping || 0, item.total || 0, item.cogs || 0, item.profit || 0,
+            item.externalId || item.externalid || ''
+          ]
+        },
+        {
+          file: 'categories.json',
+          cacheKey: 'OSOT_CATS',
+          tab: 'Categories',
+          mapFn: item => [item.id, item.code, item.label, item.color, item.subs ? JSON.stringify(item.subs) : '{}']
+        },
+        {
+          file: 'brands.json',
+          cacheKey: '__brandsCache',
+          tab: 'Brands',
+          mapFn: item => [item.id, item.name, item.code, item.website, item.status, item.notes]
+        }
+      ];
+
+      let totalSynced = 0;
+
+      for (const cfg of seedConfigs) {
+        try {
+          let sourceData = [];
+          if (cfg.cacheKey && window[cfg.cacheKey]) {
+            sourceData = Array.isArray(window[cfg.cacheKey]) ? window[cfg.cacheKey] : (typeof window[cfg.cacheKey] === 'object' ? Object.values(window[cfg.cacheKey]) : []);
+          }
+          if (!sourceData || sourceData.length === 0) {
+            sourceData = await window.makerAPI.readData(cfg.file) || [];
+          }
+
+          if (sourceData && Array.isArray(sourceData) && sourceData.length > 0) {
+            for (const item of sourceData) {
+              const row = cfg.mapFn(item);
+              if (row && row[0]) {
+                await window.MAKER_CONFIG.saveToDatabase(cfg.tab, row);
+                totalSynced++;
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`[Rebuild] Error seeding tab ${cfg.tab}:`, err);
+        }
+      }
+
+      if (showNotice) {
+        alert(`⚡ Rebuild complete!\n\nSuccessfully queued ${totalSynced} records across all database tabs for synchronization with Google Sheets.`);
+      }
+    };
+
+    /**
+     * Auto-seeding / Auto-sync engine:
+     * Reads local JSON caches and automatically syncs any local records missing from remote Google Sheets tabs.
+     */
+    window.autoSyncAllDataToSheets = async function() {
+      if (!window.MAKER_CONFIG || !window.MAKER_CONFIG.scriptUrl || !window.makerAPI) return;
+
+      console.log('[AutoSync] Checking bidirectional synchronization between local JSON and Google Sheets...');
+
+      const syncTargets = [
+        { file: 'suppliers.json', tab: 'Suppliers', moduleInit: '__makerInit_suppliers' },
+        { file: 'customers.json', tab: 'Customers', moduleInit: '__makerInit_customers' },
+        { file: 'inventory.json', tab: 'Inventory', moduleInit: 'loadInventory' },
+        { file: 'sku.json', tab: 'Sku' },
+        { file: 'products.json', tab: 'Products' },
+        { file: 'orders.json', tab: 'Orders' },
+        { file: 'brands.json', tab: 'Brands' }
+      ];
+
+      for (const target of syncTargets) {
+        try {
+          if (target.moduleInit && typeof window[target.moduleInit] === 'function') {
+            await window[target.moduleInit](false);
+          }
+        } catch (err) {
+          console.error(`[AutoSync] Error running ${target.moduleInit} for ${target.tab}:`, err);
+        }
+      }
+    };
 
     window.makerAPI = Object.assign({}, originalMakerAPI, {
       async readData(filename) {

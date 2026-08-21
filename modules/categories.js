@@ -69,8 +69,8 @@ window.OSOT_CATS = null;
               <div class="field" style="margin-bottom:12px;">
                 <label>Badge Color (CSS color or Hex)</label>
                 <div style="display:flex; gap:8px;">
-                  <input type="text" id="cat-color" required placeholder="e.g. var(--accent) or #e040fb" style="flex:1;">
-                  <input type="color" id="cat-color-picker" style="width:40px; padding:0; cursor:pointer;" oninput="g('cat-color').value = this.value">
+                  <input type="text" id="cat-color" required placeholder="e.g. var(--accent) or #e040fb" style="flex:1;" oninput="if(this.value.startsWith('#')) g('cat-color-picker').value = this.value">
+                  <input type="color" id="cat-color-picker" value="#e040fb" style="width:40px; height:38px; padding:2px; cursor:pointer; background:var(--surface); border:1px solid var(--border); border-radius:6px;" oninput="g('cat-color').value = this.value" onchange="g('cat-color').value = this.value">
                 </div>
               </div>
               <div class="field" style="margin-bottom:18px;">
@@ -160,17 +160,34 @@ window.OSOT_CATS = null;
           for (let i = 1; i < rawRows.length; i++) {
             const r = rawRows[i];
             if (!r || r.length === 0) continue;
-            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
-            if (!idVal) continue;
+            let idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
+            const codeVal = (codeIdx !== -1 ? r[codeIdx] : '') || '';
+            const labelVal = (labelIdx !== -1 ? r[labelIdx] : '') || '';
+            if (!idVal && !codeVal && !labelVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
             let subsObj = {};
             try { subsObj = JSON.parse((subsIdx !== -1 ? r[subsIdx] : '') || '{}'); } catch(e){}
-            remoteParsed.push({
+
+            const itemObj = {
               id: idVal,
-              code: (codeIdx !== -1 ? r[codeIdx] : '') || '',
-              label: (labelIdx !== -1 ? r[labelIdx] : '') || '',
+              code: codeVal,
+              label: labelVal,
               color: (colorIdx !== -1 ? r[colorIdx] : '') || 'var(--accent)',
               subs: subsObj
-            });
+            };
+            remoteParsed.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Categories', [
+                itemObj.id, itemObj.code, itemObj.label, itemObj.color, JSON.stringify(itemObj.subs)
+              ]);
+            }
           }
           remoteParsed = remoteParsed.filter(x => x.id && x.label !== 'DELETED');
         }
