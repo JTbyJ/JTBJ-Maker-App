@@ -151,15 +151,15 @@ window.__suppliersCache = null;
 
   /* ── INITIALIZATION LOADER ── */
   async function load(forceRefresh = false) {
-    if (!forceRefresh && window.__suppliersCache && Array.isArray(window.__suppliersCache)) {
-      render();
-      return;
-    }
-
     var localData = [];
     try {
       localData = await window.makerAPI.readData(FILE) || [];
     } catch(e) {}
+
+    if (localData && localData.length > 0) {
+      window.__suppliersCache = localData;
+      render();
+    }
 
     try {
       let fetchFunc = null;
@@ -188,11 +188,19 @@ window.__suppliersCache = null;
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
-            if (!idVal) continue;
-            parsedList.push({
+            let idVal = idIdx !== -1 ? r[idIdx] : '';
+            const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+            if (!idVal && !nameVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'sup_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
-              name: nameIdx !== -1 ? r[nameIdx] : '',
+              name: nameVal,
               category: catIdx !== -1 ? r[catIdx] : 'Filament',
               status: statIdx !== -1 ? r[statIdx] : 'Active',
               rating: ratingIdx !== -1 ? (parseInt(r[ratingIdx]) || 5) : 5,
@@ -204,12 +212,46 @@ window.__suppliersCache = null;
               minOrder: minIdx !== -1 ? r[minIdx] : '',
               shipping: shipIdx !== -1 ? r[shipIdx] : '',
               notes: notesIdx !== -1 ? r[notesIdx] : ''
-            });
+            };
+            parsedList.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Suppliers', [
+                itemObj.id, itemObj.name, itemObj.category, itemObj.status, itemObj.rating,
+                itemObj.website, itemObj.contact, itemObj.email, itemObj.phone,
+                itemObj.lead, itemObj.minOrder, itemObj.shipping, itemObj.notes
+              ]);
+            }
           }
 
-          window.__suppliersCache = parsedList.filter(x => x.id && x.status !== 'DELETED');
+          const validParsed = parsedList.filter(x => x.id && x.status !== 'DELETED');
+
+          // Bidirectional merge: combine remote items + missing local items
+          const combinedMap = new Map();
+          for (const item of validParsed) {
+            combinedMap.set(item.id, item);
+          }
+          if (localData && Array.isArray(localData)) {
+            for (const localItem of localData) {
+              if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.status !== 'DELETED') {
+                combinedMap.set(localItem.id, localItem);
+                if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                  window.MAKER_CONFIG.saveToDatabase('Suppliers', [
+                    localItem.id, localItem.name, localItem.category, localItem.status, localItem.rating,
+                    localItem.website, localItem.contact, localItem.email, localItem.phone,
+                    localItem.lead, localItem.minOrder, localItem.shipping, localItem.notes
+                  ]);
+                }
+              }
+            }
+          }
+
+          window.__suppliersCache = Array.from(combinedMap.values());
           await window.makerAPI.writeData(FILE, window.__suppliersCache);
           render();
+          if (forceRefresh) {
+            alert('🔄 Suppliers synchronized successfully!\n' + (window.__suppliersCache ? window.__suppliersCache.length : 0) + ' entries loaded/updated in the database.');
+          }
           return;
         }
       }

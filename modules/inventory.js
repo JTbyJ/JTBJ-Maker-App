@@ -401,12 +401,21 @@ async function loadInventory(forceRefresh = false) {
         for (let i = 1; i < rawRows.length; i++) {
           const r = rawRows[i];
           if (!r || r.length === 0) continue;
-          const idVal = idIdx !== -1 ? r[idIdx] : '';
-          if (!idVal) continue;
-          remoteDataParsed.push({
+          let idVal = idIdx !== -1 ? r[idIdx] : '';
+          const skuVal = skuIdx !== -1 ? r[skuIdx] : '';
+          const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+          if (!idVal && !skuVal && !nameVal) continue;
+
+          let newlyAssigned = false;
+          if (!idVal) {
+            idVal = 'inv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            newlyAssigned = true;
+          }
+
+          const itemObj = {
             id: idVal,
-            sku: skuIdx !== -1 ? r[skuIdx] : '',
-            name: nameIdx !== -1 ? r[nameIdx] : '',
+            sku: skuVal,
+            name: nameVal,
             brand: brandIdx !== -1 ? r[brandIdx] : '',
             cat: catIdx !== -1 ? r[catIdx] : 'FIL',
             subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
@@ -425,7 +434,18 @@ async function loadInventory(forceRefresh = false) {
             unitMetric: unitMetricIdx !== -1 ? r[unitMetricIdx] : 'ea',
             metricCapacity: metricCapacityIdx !== -1 ? (Number(r[metricCapacityIdx]) || 1) : 1,
             photo: photoIdx !== -1 ? r[photoIdx] : ''
-          });
+          };
+          remoteDataParsed.push(itemObj);
+
+          if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            window.MAKER_CONFIG.saveToDatabase('Inventory', [
+              itemObj.id, itemObj.sku, itemObj.name, itemObj.brand, itemObj.cat,
+              itemObj.subcat, itemObj.type, itemObj.colour, itemObj.qty, itemObj.lowStock,
+              itemObj.diameter, itemObj.weight, itemObj.printTemp, itemObj.bedTemp,
+              itemObj.cost, itemObj.location, itemObj.supplier, itemObj.notes,
+              itemObj.unitMetric, itemObj.metricCapacity, itemObj.photo
+            ]);
+          }
         }
         
         // Filter out DELETED elements
@@ -434,35 +454,31 @@ async function loadInventory(forceRefresh = false) {
     }
 
     if (remoteDataParsed !== null) {
-      // Fetch was successful! Let's decide if we fallback/seed or overwrite local
-      if (remoteDataParsed.length === 0 && localData.length > 0) {
-        // Sheet is empty, but local JSON file has data -> Seed sheet!
-        window.__inventoryCache = localData;
-        renderInventoryTable(window.__inventoryCache);
-
-        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-          for (const item of localData) {
-            const rowArray = [
-              item.id, item.sku, item.name, item.brand, item.cat,
-              item.subcat, item.type, item.colour, item.qty, item.lowStock,
-              item.diameter, item.weight, item.printTemp, item.bedTemp,
-              item.cost, item.location, item.supplier, item.notes,
-              item.unitMetric || 'ea', item.metricCapacity || 1
-            ];
-            await window.MAKER_CONFIG.saveToDatabase('Inventory', rowArray);
+      const combinedMap = new Map();
+      for (const item of remoteDataParsed) {
+        combinedMap.set(item.id, item);
+      }
+      if (localData && Array.isArray(localData)) {
+        for (const localItem of localData) {
+          if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.name !== 'DELETED') {
+            combinedMap.set(localItem.id, localItem);
+            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Inventory', [
+                localItem.id, localItem.sku, localItem.name, localItem.brand, localItem.cat,
+                localItem.subcat, localItem.type, localItem.colour, localItem.qty, localItem.lowStock,
+                localItem.diameter, localItem.weight, localItem.printTemp, localItem.bedTemp,
+                localItem.cost, localItem.location, localItem.supplier, localItem.notes,
+                localItem.unitMetric || 'ea', localItem.metricCapacity || 1, localItem.photo || ''
+              ]);
+            }
           }
         }
-      } else {
-        // Remote sheet has data -> Use it!
-        window.__inventoryCache = remoteDataParsed;
-        renderInventoryTable(window.__inventoryCache);
+      }
 
-        // Delta check: Only write to local file if there's an actual change
-        const localStr = JSON.stringify(localData);
-        const remoteStr = JSON.stringify(remoteDataParsed);
-        if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
-          await window.makerAPI.writeData('inventory.json', remoteDataParsed);
-        }
+      window.__inventoryCache = Array.from(combinedMap.values());
+      renderInventoryTable(window.__inventoryCache);
+      if (window.makerAPI && window.makerAPI.writeData) {
+        await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
       }
       return;
     }
@@ -522,7 +538,7 @@ function renderInventoryTable(items) {
     var photoCell = '';
     if (imageLink) {
       var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(imageLink) : imageLink;
-      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))">`;
+      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))" onerror="this.onerror=null; this.outerHTML='<span style=\x22font-size:18px; color:var(--muted);\x22 title=\x22Image restricted or unavailable\x22>📷</span>';">`;
     } else {
       photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
     }
