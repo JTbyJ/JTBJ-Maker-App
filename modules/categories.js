@@ -160,17 +160,34 @@ window.OSOT_CATS = null;
           for (let i = 1; i < rawRows.length; i++) {
             const r = rawRows[i];
             if (!r || r.length === 0) continue;
-            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
-            if (!idVal) continue;
+            let idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
+            const codeVal = (codeIdx !== -1 ? r[codeIdx] : '') || '';
+            const labelVal = (labelIdx !== -1 ? r[labelIdx] : '') || '';
+            if (!idVal && !codeVal && !labelVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
             let subsObj = {};
             try { subsObj = JSON.parse((subsIdx !== -1 ? r[subsIdx] : '') || '{}'); } catch(e){}
-            remoteParsed.push({
+
+            const itemObj = {
               id: idVal,
-              code: (codeIdx !== -1 ? r[codeIdx] : '') || '',
-              label: (labelIdx !== -1 ? r[labelIdx] : '') || '',
+              code: codeVal,
+              label: labelVal,
               color: (colorIdx !== -1 ? r[colorIdx] : '') || 'var(--accent)',
               subs: subsObj
-            });
+            };
+            remoteParsed.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Categories', [
+                itemObj.id, itemObj.code, itemObj.label, itemObj.color, JSON.stringify(itemObj.subs)
+              ]);
+            }
           }
           remoteParsed = remoteParsed.filter(x => x.id && x.label !== 'DELETED');
         }

@@ -398,13 +398,21 @@
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
-            if (!idVal) continue;
+            let idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
+            const skuVal = (skuIdx !== -1 ? r[skuIdx] : '') || '';
+            const nameVal = (nameIdx !== -1 ? r[nameIdx] : '') || '';
+            if (!idVal && !skuVal && !nameVal) continue;
 
-            parsedSkus.push({
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'sku_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
-              sku: (skuIdx !== -1 ? r[skuIdx] : '') || '',
-              name: (nameIdx !== -1 ? r[nameIdx] : '') || '',
+              sku: skuVal,
+              name: nameVal,
               cat: (catIdx !== -1 ? r[catIdx] : '') || firstCat,
               subcat: (subcatIdx !== -1 ? r[subcatIdx] : '') || '',
               brand: (brandIdx !== -1 ? r[brandIdx] : '') || '',
@@ -419,7 +427,16 @@
               notes: (notesIdx !== -1 ? r[notesIdx] : '') || '',
               classification: (classIdx !== -1 ? r[classIdx] : '') || 'Raw Component / Material (BOM Input)',
               photo: (photoIdx !== -1 ? r[photoIdx] : '') || ''
-            });
+            };
+            parsedSkus.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Sku', [
+                itemObj.id, itemObj.sku, itemObj.name, itemObj.cat, itemObj.subcat, itemObj.brand,
+                itemObj.cost, itemObj.price, itemObj.cogs, itemObj.retail, itemObj.status, itemObj.notes,
+                itemObj.classification, itemObj.photo, itemObj.supplier, itemObj.variation, itemObj.varCode
+              ]);
+            }
           }
 
           items = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');

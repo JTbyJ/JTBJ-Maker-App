@@ -547,16 +547,23 @@
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
-            if (!idVal) continue;
+            let idVal = idIdx !== -1 ? r[idIdx] : '';
+            const numVal = orderNumIdx !== -1 ? r[orderNumIdx] : '';
+            if (!idVal && !numVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'ord_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
 
             let lineItems = [];
             const rawItems = itemsIdx !== -1 ? r[itemsIdx] : '';
             try { lineItems = JSON.parse(rawItems || '[]'); } catch(e) {}
 
-            parsedOrders.push({
+            const itemObj = {
               id: idVal,
-              orderNumber: orderNumIdx !== -1 ? r[orderNumIdx] : '',
+              orderNumber: numVal,
               date: dateIdx !== -1 ? r[dateIdx] : '',
               source: sourceIdx !== -1 ? r[sourceIdx] : 'Other',
               status: statusIdx !== -1 ? r[statusIdx] : 'Pending',
@@ -571,7 +578,17 @@
               cogs: cogsIdx !== -1 ? (parseFloat(r[cogsIdx]) || 0) : 0,
               profit: profitIdx !== -1 ? (parseFloat(r[profitIdx]) || 0) : 0,
               externalId: extIdIdx !== -1 ? r[extIdIdx] : ''
-            });
+            };
+            parsedOrders.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Orders', [
+                itemObj.id, itemObj.orderNumber, itemObj.date, itemObj.source, itemObj.status,
+                itemObj.paymentStatus, itemObj.customerId, itemObj.customerName, itemObj.notes,
+                JSON.stringify(itemObj.lineItems || []), itemObj.subtotal, itemObj.shipping,
+                itemObj.total, itemObj.cogs, itemObj.profit, itemObj.externalId
+              ]);
+            }
           }
 
           orders = parsedOrders.filter(x => x.id && x.status !== 'DELETED');

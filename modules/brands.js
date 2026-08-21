@@ -168,18 +168,31 @@ window.__brandsCache = null;
           for (let i = 1; i < rawRows.length; i++) {
             const r = rawRows[i];
             if (!r || r.length === 0) continue;
-            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
-            if (!idVal) continue;
-
+            let idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
             const nameVal = (nameIdx !== -1 ? r[nameIdx] : '') || '';
-            remoteParsed.push({
+            if (!idVal && !nameVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'brand_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
               name: nameVal,
               code: (codeIdx !== -1 ? r[codeIdx] : '') || getBrandCode(nameVal),
               website: (webIdx !== -1 ? r[webIdx] : '') || '',
               status: (statIdx !== -1 ? r[statIdx] : '') || 'Active',
               notes: (notesIdx !== -1 ? r[notesIdx] : '') || ''
-            });
+            };
+            remoteParsed.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Brands', [
+                itemObj.id, itemObj.name, itemObj.code, itemObj.website, itemObj.status, itemObj.notes
+              ]);
+            }
           }
           remoteParsed = remoteParsed.filter(x => x.id && x.status !== 'DELETED');
         }

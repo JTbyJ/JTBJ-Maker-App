@@ -496,12 +496,21 @@ window.__customerCache = null;
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
-            if (!idVal) continue;
-            remoteDataParsed.push({
+            let idVal = idIdx !== -1 ? r[idIdx] : '';
+            const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+            const emailVal = emailIdx !== -1 ? r[emailIdx] : '';
+            if (!idVal && !nameVal && !emailVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'cust_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
-              name: nameIdx !== -1 ? r[nameIdx] : '',
-              email: emailIdx !== -1 ? r[emailIdx] : '',
+              name: nameVal,
+              email: emailVal,
               phone: phoneIdx !== -1 ? formatPhoneNumber(r[phoneIdx]) : '',
               address: addrIdx !== -1 ? r[addrIdx] : '',
               finishPref: finishIdx !== -1 ? r[finishIdx] : '',
@@ -509,7 +518,16 @@ window.__customerCache = null;
               type: typeIdx !== -1 ? r[typeIdx] : 'Personal',
               notes: notesIdx !== -1 ? r[notesIdx] : '',
               createdAt: dateIdx !== -1 ? r[dateIdx] : ''
-            });
+            };
+            remoteDataParsed.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Customers', [
+                itemObj.id, itemObj.name, itemObj.email, formatPhoneNumber(itemObj.phone),
+                itemObj.address, itemObj.finishPref, itemObj.igHandle, itemObj.type,
+                itemObj.notes, itemObj.createdAt
+              ]);
+            }
           }
           remoteDataParsed = remoteDataParsed.filter(c => c.name || c.email);
         }

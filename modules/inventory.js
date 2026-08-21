@@ -401,12 +401,21 @@ async function loadInventory(forceRefresh = false) {
         for (let i = 1; i < rawRows.length; i++) {
           const r = rawRows[i];
           if (!r || r.length === 0) continue;
-          const idVal = idIdx !== -1 ? r[idIdx] : '';
-          if (!idVal) continue;
-          remoteDataParsed.push({
+          let idVal = idIdx !== -1 ? r[idIdx] : '';
+          const skuVal = skuIdx !== -1 ? r[skuIdx] : '';
+          const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+          if (!idVal && !skuVal && !nameVal) continue;
+
+          let newlyAssigned = false;
+          if (!idVal) {
+            idVal = 'inv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            newlyAssigned = true;
+          }
+
+          const itemObj = {
             id: idVal,
-            sku: skuIdx !== -1 ? r[skuIdx] : '',
-            name: nameIdx !== -1 ? r[nameIdx] : '',
+            sku: skuVal,
+            name: nameVal,
             brand: brandIdx !== -1 ? r[brandIdx] : '',
             cat: catIdx !== -1 ? r[catIdx] : 'FIL',
             subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
@@ -425,7 +434,18 @@ async function loadInventory(forceRefresh = false) {
             unitMetric: unitMetricIdx !== -1 ? r[unitMetricIdx] : 'ea',
             metricCapacity: metricCapacityIdx !== -1 ? (Number(r[metricCapacityIdx]) || 1) : 1,
             photo: photoIdx !== -1 ? r[photoIdx] : ''
-          });
+          };
+          remoteDataParsed.push(itemObj);
+
+          if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+            window.MAKER_CONFIG.saveToDatabase('Inventory', [
+              itemObj.id, itemObj.sku, itemObj.name, itemObj.brand, itemObj.cat,
+              itemObj.subcat, itemObj.type, itemObj.colour, itemObj.qty, itemObj.lowStock,
+              itemObj.diameter, itemObj.weight, itemObj.printTemp, itemObj.bedTemp,
+              itemObj.cost, itemObj.location, itemObj.supplier, itemObj.notes,
+              itemObj.unitMetric, itemObj.metricCapacity, itemObj.photo
+            ]);
+          }
         }
         
         // Filter out DELETED elements

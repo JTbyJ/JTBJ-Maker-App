@@ -188,11 +188,19 @@ window.__suppliersCache = null;
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = idIdx !== -1 ? r[idIdx] : '';
-            if (!idVal) continue;
-            parsedList.push({
+            let idVal = idIdx !== -1 ? r[idIdx] : '';
+            const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+            if (!idVal && !nameVal) continue;
+
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'sup_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
-              name: nameIdx !== -1 ? r[nameIdx] : '',
+              name: nameVal,
               category: catIdx !== -1 ? r[catIdx] : 'Filament',
               status: statIdx !== -1 ? r[statIdx] : 'Active',
               rating: ratingIdx !== -1 ? (parseInt(r[ratingIdx]) || 5) : 5,
@@ -204,7 +212,16 @@ window.__suppliersCache = null;
               minOrder: minIdx !== -1 ? r[minIdx] : '',
               shipping: shipIdx !== -1 ? r[shipIdx] : '',
               notes: notesIdx !== -1 ? r[notesIdx] : ''
-            });
+            };
+            parsedList.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Suppliers', [
+                itemObj.id, itemObj.name, itemObj.category, itemObj.status, itemObj.rating,
+                itemObj.website, itemObj.contact, itemObj.email, itemObj.phone,
+                itemObj.lead, itemObj.minOrder, itemObj.shipping, itemObj.notes
+              ]);
+            }
           }
 
           window.__suppliersCache = parsedList.filter(x => x.id && x.status !== 'DELETED');
