@@ -163,8 +163,8 @@
       '<div class="input-row">'+
         '<div class="field" style="flex:2"><label>Product Name</label><input id="sku-pname" placeholder="e.g. Hyper PLA Blue 1kg"></div>'+
         '<div class="field" style="flex:1">'+
-          '<label>Brand / Manufacturer</label>'+
-          '<input id="sku-brand-input" placeholder="e.g. Creality" style="font-weight:600;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Brand / Manufacturer</label><button type="button" class="btn btn-ghost btn-sm" data-goto="brands" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Manage</button></div>'+
+          '<select id="sku-brand-select" style="font-weight:600;"><option value="">Select Brand...</option></select>'+
         '</div>'+
         '<div class="field" style="flex:1">'+
           '<div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ Add New</button></div>'+
@@ -229,8 +229,11 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
-    var brandName=$('sku-brand-input').value || '';
-    var brandCode=getBrandCode(brandName);
+    var brandSelect=$('sku-brand-select');
+    var brandName=brandSelect ? brandSelect.value : '';
+    // Check if brand exists in cache to retrieve explicit 3-letter code
+    var brandObj = (window.__brandsCache || []).find(b => b.name === brandName);
+    var brandCode = brandObj && brandObj.code ? brandObj.code : getBrandCode(brandName);
     var varCode=($('sku-var-code').value || '').trim().toUpperCase();
 
     if (varCode) {
@@ -268,7 +271,7 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-input','sku-var-code'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-select','sku-var-code'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);
@@ -370,7 +373,9 @@
         const remoteData = await fetchFunc('Sku');
         if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
           const header = remoteData[0].map(h => String(h || '').trim().toLowerCase());
-          const idIdx = header.findIndex(h => h === 'id' || h === 'sku_id' || h.includes('id'));
+          let idIdx = header.findIndex(h => h === 'id' || h === 'sku_id' || h === 'item_id');
+          if (idIdx === -1) idIdx = header.findIndex(h => h === 'sku');
+          if (idIdx === -1) idIdx = 0;
           const skuIdx = header.findIndex(h => h === 'sku' || h.includes('sku'));
           const nameIdx = header.findIndex(h => h === 'name' || h === 'product name' || h.includes('name'));
           const catIdx = header.findIndex(h => h === 'cat' || h === 'category' || h.includes('cat'));
@@ -393,13 +398,21 @@
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            const idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
-            if (!idVal) continue;
+            let idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
+            const skuVal = (skuIdx !== -1 ? r[skuIdx] : '') || '';
+            const nameVal = (nameIdx !== -1 ? r[nameIdx] : '') || '';
+            if (!idVal && !skuVal && !nameVal) continue;
 
-            parsedSkus.push({
+            let newlyAssigned = false;
+            if (!idVal) {
+              idVal = 'sku_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+              newlyAssigned = true;
+            }
+
+            const itemObj = {
               id: idVal,
-              sku: (skuIdx !== -1 ? r[skuIdx] : '') || '',
-              name: (nameIdx !== -1 ? r[nameIdx] : '') || '',
+              sku: skuVal,
+              name: nameVal,
               cat: (catIdx !== -1 ? r[catIdx] : '') || firstCat,
               subcat: (subcatIdx !== -1 ? r[subcatIdx] : '') || '',
               brand: (brandIdx !== -1 ? r[brandIdx] : '') || '',
@@ -414,7 +427,16 @@
               notes: (notesIdx !== -1 ? r[notesIdx] : '') || '',
               classification: (classIdx !== -1 ? r[classIdx] : '') || 'Raw Component / Material (BOM Input)',
               photo: (photoIdx !== -1 ? r[photoIdx] : '') || ''
-            });
+            };
+            parsedSkus.push(itemObj);
+
+            if (newlyAssigned && window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Sku', [
+                itemObj.id, itemObj.sku, itemObj.name, itemObj.cat, itemObj.subcat, itemObj.brand,
+                itemObj.cost, itemObj.price, itemObj.cogs, itemObj.retail, itemObj.status, itemObj.notes,
+                itemObj.classification, itemObj.photo, itemObj.supplier, itemObj.variation, itemObj.varCode
+              ]);
+            }
           }
 
           items = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');
@@ -429,7 +451,9 @@
       items=await window.makerAPI.readData(FILE)||[];
     }
 
-    populateBrandsDropdown();
+    if (window.populateBrandsDropdown) {
+      window.populateBrandsDropdown('sku-brand-select');
+    }
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
@@ -474,7 +498,7 @@
       var photoCell = '';
       if (i.photo) {
         var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(i.photo) : i.photo;
-        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))">';
+        photoCell = '<img src="' + escapeHtml(directPhotoUrl) + '" class="sku-thumbnail" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent(\'' + encodeURIComponent(i.photo) + '\'))" onerror="this.onerror=null; this.outerHTML=\'<span style=&quot;font-size:18px; color:var(--muted);&quot; title=&quot;Image restricted or unavailable&quot;>📷</span>\';">';
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }
@@ -512,7 +536,8 @@
         $('sku-var-name').value=i.variation || '';
         $('sku-var-code').value=i.varCode || '';
         $('sku-pname').value=i.name||'';
-        $('sku-brand-input').value=i.brand||'';
+        if (window.populateBrandsDropdown) window.populateBrandsDropdown('sku-brand-select', i.brand || '');
+        $('sku-brand-select').value=i.brand||'';
         $('sku-supplier-select').value=i.supplier||'';
         $('sku-classification').value=i.classification || 'Raw Component / Material (BOM Input)';
         $('sku-cost').value=i.cost||'';
@@ -556,7 +581,7 @@
       name:name,
       cat:catCode,
       subcat:subCode,
-      brand:$('sku-brand-input').value.trim(),
+      brand:$('sku-brand-select').value,
       supplier:$('sku-supplier-select').value,
       variation:$('sku-var-name').value.trim(),
       varCode:$('sku-var-code').value.trim().toUpperCase(),
@@ -593,7 +618,8 @@
     $('sku-cancel').style.display='none';
     $('sku-custom').value='';
     $('sku-pname').value='';
-    $('sku-brand-input').value='';
+    if (window.populateBrandsDropdown) window.populateBrandsDropdown('sku-brand-select', '');
+    $('sku-brand-select').value='';
     $('sku-supplier-select').value='';
     $('sku-var-name').value='';
     $('sku-var-code').value='';
