@@ -133,7 +133,7 @@ window.__brandsCache = null;
     await loadBrands(false);
   };
 
-  async function loadBrands(forceRefresh) {
+  async function loadBrands(forceRefresh = false) {
     if (!forceRefresh && window.__brandsCache && Array.isArray(window.__brandsCache)) {
       renderBrandsTable();
       return;

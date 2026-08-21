@@ -489,7 +489,7 @@ window.__productsCache = null;
     g('prod-sync-btn').addEventListener('click', async function() {
       g('prod-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Syncing products with Google Sheets...</td></tr>';
       window.__productsCache = null;
-      await load();
+      await load(true);
     });
 
     g('prod-form').addEventListener('submit',async function(e){
@@ -723,7 +723,7 @@ window.__productsCache = null;
     });
   }
 
-  async function load(){
+  async function load(forceRefresh = false){
     await loadInventory();
     await populateProductCats();
 
