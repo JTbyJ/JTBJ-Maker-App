@@ -454,35 +454,31 @@ async function loadInventory(forceRefresh = false) {
     }
 
     if (remoteDataParsed !== null) {
-      // Fetch was successful! Let's decide if we fallback/seed or overwrite local
-      if (remoteDataParsed.length === 0 && localData.length > 0) {
-        // Sheet is empty, but local JSON file has data -> Seed sheet!
-        window.__inventoryCache = localData;
-        renderInventoryTable(window.__inventoryCache);
-
-        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-          for (const item of localData) {
-            const rowArray = [
-              item.id, item.sku, item.name, item.brand, item.cat,
-              item.subcat, item.type, item.colour, item.qty, item.lowStock,
-              item.diameter, item.weight, item.printTemp, item.bedTemp,
-              item.cost, item.location, item.supplier, item.notes,
-              item.unitMetric || 'ea', item.metricCapacity || 1
-            ];
-            await window.MAKER_CONFIG.saveToDatabase('Inventory', rowArray);
+      const combinedMap = new Map();
+      for (const item of remoteDataParsed) {
+        combinedMap.set(item.id, item);
+      }
+      if (localData && Array.isArray(localData)) {
+        for (const localItem of localData) {
+          if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.name !== 'DELETED') {
+            combinedMap.set(localItem.id, localItem);
+            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Inventory', [
+                localItem.id, localItem.sku, localItem.name, localItem.brand, localItem.cat,
+                localItem.subcat, localItem.type, localItem.colour, localItem.qty, localItem.lowStock,
+                localItem.diameter, localItem.weight, localItem.printTemp, localItem.bedTemp,
+                localItem.cost, localItem.location, localItem.supplier, localItem.notes,
+                localItem.unitMetric || 'ea', localItem.metricCapacity || 1, localItem.photo || ''
+              ]);
+            }
           }
         }
-      } else {
-        // Remote sheet has data -> Use it!
-        window.__inventoryCache = remoteDataParsed;
-        renderInventoryTable(window.__inventoryCache);
+      }
 
-        // Delta check: Only write to local file if there's an actual change
-        const localStr = JSON.stringify(localData);
-        const remoteStr = JSON.stringify(remoteDataParsed);
-        if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
-          await window.makerAPI.writeData('inventory.json', remoteDataParsed);
-        }
+      window.__inventoryCache = Array.from(combinedMap.values());
+      renderInventoryTable(window.__inventoryCache);
+      if (window.makerAPI && window.makerAPI.writeData) {
+        await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
       }
       return;
     }

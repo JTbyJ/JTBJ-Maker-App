@@ -534,29 +534,29 @@ window.__customerCache = null;
       }
 
       if (remoteDataParsed !== null) {
-        if (remoteDataParsed.length === 0 && localData.length > 0) {
-          // Seed the remote sheet
-          window.__customerCache = localData;
-          renderCustomerTable(window.__customerCache);
-
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-            for (const cust of localData) {
-              await window.MAKER_CONFIG.saveToDatabase('Customers', [
-                cust.id, cust.name, cust.email, formatPhoneNumber(cust.phone),
-                cust.address, cust.finishPref, cust.igHandle, cust.type,
-                cust.notes, cust.createdAt
-              ]);
+        const combinedMap = new Map();
+        for (const item of remoteDataParsed) {
+          combinedMap.set(item.id, item);
+        }
+        if (localData && Array.isArray(localData)) {
+          for (const localItem of localData) {
+            if (localItem && localItem.id && !combinedMap.has(localItem.id)) {
+              combinedMap.set(localItem.id, localItem);
+              if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                window.MAKER_CONFIG.saveToDatabase('Customers', [
+                  localItem.id, localItem.name, localItem.email, formatPhoneNumber(localItem.phone),
+                  localItem.address, localItem.finishPref, localItem.igHandle, localItem.type,
+                  localItem.notes, localItem.createdAt
+                ]);
+              }
             }
           }
-        } else {
-          window.__customerCache = remoteDataParsed;
-          renderCustomerTable(window.__customerCache);
+        }
 
-          const localStr = JSON.stringify(localData);
-          const remoteStr = JSON.stringify(remoteDataParsed);
-          if (localStr !== remoteStr && window.makerAPI && window.makerAPI.writeData) {
-            await window.makerAPI.writeData('customers.json', remoteDataParsed);
-          }
+        window.__customerCache = Array.from(combinedMap.values());
+        renderCustomerTable(window.__customerCache);
+        if (window.makerAPI && window.makerAPI.writeData) {
+          await window.makerAPI.writeData('customers.json', window.__customerCache);
         }
         return;
       }

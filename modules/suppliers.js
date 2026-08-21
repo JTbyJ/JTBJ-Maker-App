@@ -225,22 +225,29 @@ window.__suppliersCache = null;
           }
 
           const validParsed = parsedList.filter(x => x.id && x.status !== 'DELETED');
-          if (validParsed.length === 0 && localData.length > 0) {
-            console.log('[Suppliers] Remote Google Sheet has 0 data rows, preserving local cache and seeding remote sheet...');
-            window.__suppliersCache = localData;
-            for (const itemObj of localData) {
-              if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-                window.MAKER_CONFIG.saveToDatabase('Suppliers', [
-                  itemObj.id, itemObj.name, itemObj.category, itemObj.status, itemObj.rating,
-                  itemObj.website, itemObj.contact, itemObj.email, itemObj.phone,
-                  itemObj.lead, itemObj.minOrder, itemObj.shipping, itemObj.notes
-                ]);
+
+          // Bidirectional merge: combine remote items + missing local items
+          const combinedMap = new Map();
+          for (const item of validParsed) {
+            combinedMap.set(item.id, item);
+          }
+          if (localData && Array.isArray(localData)) {
+            for (const localItem of localData) {
+              if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.status !== 'DELETED') {
+                combinedMap.set(localItem.id, localItem);
+                if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                  window.MAKER_CONFIG.saveToDatabase('Suppliers', [
+                    localItem.id, localItem.name, localItem.category, localItem.status, localItem.rating,
+                    localItem.website, localItem.contact, localItem.email, localItem.phone,
+                    localItem.lead, localItem.minOrder, localItem.shipping, localItem.notes
+                  ]);
+                }
               }
             }
-          } else {
-            window.__suppliersCache = validParsed;
-            await window.makerAPI.writeData(FILE, window.__suppliersCache);
           }
+
+          window.__suppliersCache = Array.from(combinedMap.values());
+          await window.makerAPI.writeData(FILE, window.__suppliersCache);
           render();
           if (forceRefresh) {
             alert('🔄 Suppliers synchronized successfully!\n' + (window.__suppliersCache ? window.__suppliersCache.length : 0) + ' entries loaded/updated in the database.');

@@ -727,8 +727,11 @@ window.__productsCache = null;
     await loadInventory();
     await populateProductCats();
 
-    // Use in-memory cache if available
-    if (window.__productsCache && Array.isArray(window.__productsCache) && window.__productsCache.length > 0) {
+    var localData = [];
+    try { localData = await window.makerAPI.readData(FILE) || []; } catch(e){}
+
+    // Use in-memory cache if available (unless forceRefresh is requested)
+    if (!forceRefresh && window.__productsCache && Array.isArray(window.__productsCache) && window.__productsCache.length > 0) {
       products = window.__productsCache;
       renderList();
       return;
@@ -820,10 +823,35 @@ window.__productsCache = null;
             }
           }
 
-          products = parsedProds.filter(x => x.id && x.status !== 'DELETED');
+          const validParsed = parsedProds.filter(x => x.id && x.status !== 'DELETED');
+          const combinedMap = new Map();
+          for (const item of validParsed) {
+            combinedMap.set(item.id, item);
+          }
+          if (localData && Array.isArray(localData)) {
+            for (const localItem of localData) {
+              if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.status !== 'DELETED') {
+                combinedMap.set(localItem.id, localItem);
+                if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                  window.MAKER_CONFIG.saveToDatabase('Products', [
+                    localItem.id, localItem.name, localItem.category, localItem.sku, localItem.status,
+                    JSON.stringify(localItem.platforms || []), localItem.salePrice, localItem.etsyFee,
+                    localItem.description, localItem.notes, localItem.labourHrs, localItem.labourRate,
+                    localItem.labourCost, localItem.materialCost, localItem.cogs, localItem.margin,
+                    JSON.stringify(localItem.bom || []), localItem.photo || ''
+                  ]);
+                }
+              }
+            }
+          }
+
+          products = Array.from(combinedMap.values());
           window.__productsCache = products;
           await window.makerAPI.writeData(FILE, products);
           renderList();
+          if (forceRefresh) {
+            alert('🔄 Products synchronized successfully!\n' + products.length + ' entries loaded/updated.');
+          }
           return;
         }
       }

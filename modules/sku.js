@@ -367,6 +367,9 @@
     $('sku-subcat').innerHTML = buildSubcatOptions(firstCat, firstSub);
     buildFilterOptions();
 
+    var localData = [];
+    try { localData = await window.makerAPI.readData(FILE) || []; } catch(e){}
+
     try {
       let fetchFunc = (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase);
       if (fetchFunc) {
@@ -439,13 +442,34 @@
             }
           }
 
-          items = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');
+          const validParsed = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');
+          const combinedMap = new Map();
+          for (const item of validParsed) {
+            combinedMap.set(item.id || item.sku, item);
+          }
+          if (localData && Array.isArray(localData)) {
+            for (const localItem of localData) {
+              const key = localItem.id || localItem.sku;
+              if (key && !combinedMap.has(key) && localItem.status !== 'DELETED') {
+                combinedMap.set(key, localItem);
+                if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+                  window.MAKER_CONFIG.saveToDatabase('Sku', [
+                    localItem.id, localItem.sku, localItem.name, localItem.cat, localItem.subcat, localItem.brand,
+                    localItem.cost, localItem.price, localItem.cogs, localItem.retail, localItem.status, localItem.notes,
+                    localItem.classification, localItem.photo, localItem.supplier, localItem.variation, localItem.varCode
+                  ]);
+                }
+              }
+            }
+          }
+
+          items = Array.from(combinedMap.values());
           await sv();
         } else {
-          items=await window.makerAPI.readData(FILE)||[];
+          items = localData;
         }
       } else {
-        items=await window.makerAPI.readData(FILE)||[];
+        items = localData;
       }
     } catch(err) {
       items=await window.makerAPI.readData(FILE)||[];

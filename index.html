@@ -121,7 +121,11 @@
   </nav>
 
   <div id="main">
-    <div id="topbar"><div id="topbar-title">Dashboard</div><div id="topbar-date"></div></div>
+    <div id="topbar">
+      <div id="topbar-title">Dashboard</div>
+      <button class="btn btn-ghost btn-sm" id="btn-rebuild-sheets" title="Rebuild & Seed Google Sheets Database" onclick="if(window.rebuildAndSeedGoogleSheets) window.rebuildAndSeedGoogleSheets()">⚡ Rebuild Sheet</button>
+      <div id="topbar-date"></div>
+    </div>
     
     <!-- MASTER APP LIGHTBOX MODAL (Shared across all tabs) -->
     <div id="photo-lightbox" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100000; align-items:center; justify-content:center; cursor:pointer;" onclick="this.style.display='none'">

@@ -199,30 +199,24 @@ window.__brandsCache = null;
       }
 
       if (remoteParsed !== null) {
-        if (remoteParsed.length === 0 && localData.length === 0) {
-          // Seed default brands
-          window.__brandsCache = DEFAULT_BRANDS;
-          await sv();
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-            for (const b of DEFAULT_BRANDS) {
-              await window.MAKER_CONFIG.saveToDatabase('Brands', [
-                b.id, b.name, b.code, b.website, b.status, b.notes
-              ]);
-            }
-          }
-        } else if (remoteParsed.length === 0 && localData.length > 0) {
-          window.__brandsCache = localData;
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-            for (const b of localData) {
-              await window.MAKER_CONFIG.saveToDatabase('Brands', [
-                b.id, b.name, b.code, b.website, b.status, b.notes
-              ]);
-            }
-          }
-        } else {
-          window.__brandsCache = remoteParsed;
-          await sv();
+        const combinedMap = new Map();
+        for (const item of remoteParsed) {
+          combinedMap.set(item.id, item);
         }
+        const sourceLocal = (localData && localData.length > 0) ? localData : DEFAULT_BRANDS;
+        for (const localItem of sourceLocal) {
+          if (localItem && localItem.id && !combinedMap.has(localItem.id) && localItem.status !== 'DELETED') {
+            combinedMap.set(localItem.id, localItem);
+            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+              window.MAKER_CONFIG.saveToDatabase('Brands', [
+                localItem.id, localItem.name, localItem.code, localItem.website, localItem.status, localItem.notes
+              ]);
+            }
+          }
+        }
+
+        window.__brandsCache = Array.from(combinedMap.values());
+        await sv();
         renderBrandsTable();
         return;
       }
