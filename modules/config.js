@@ -3,6 +3,92 @@
  * Path: modules/config.js
  */
 
+/**
+ * Global Table Sorting Engine
+ * Attaches interactive sorting capability to HTML <table> elements.
+ */
+window.makeTableSortable = function(tableOrId, options = {}) {
+  const table = typeof tableOrId === 'string' ? document.getElementById(tableOrId) : tableOrId;
+  if (!table) return null;
+
+  const thead = table.querySelector('thead');
+  if (!thead) return null;
+
+  const headers = Array.from(thead.querySelectorAll('th'));
+  let activeCol = options.defaultCol !== undefined ? options.defaultCol : null;
+  let activeDir = options.defaultDir || 'asc';
+
+  function updateHeaderUI() {
+    headers.forEach((th, idx) => {
+      const text = (th.dataset.baseText || th.textContent).replace(/[\u25B2\u25BC\u21C5]/g, '').trim();
+      if (text.toLowerCase() === 'actions' || text === '' || th.dataset.sortable === 'false') {
+        return;
+      }
+      th.style.cursor = 'pointer';
+      th.title = 'Click to sort';
+
+      let indicator = '<span style="opacity:0.35; font-size:10px; margin-left:4px;">⇅</span>';
+      const colKey = th.dataset.sortKey !== undefined ? th.dataset.sortKey : idx;
+      if (activeCol === colKey || activeCol === idx) {
+        indicator = `<span style="color:var(--accent); font-size:11px; margin-left:4px; font-weight:800;">${activeDir === 'asc' ? '▲' : '▼'}</span>`;
+      }
+
+      if (!th.dataset.baseText) {
+        th.dataset.baseText = text;
+      }
+      th.innerHTML = th.dataset.baseText + indicator;
+    });
+  }
+
+  headers.forEach((th, idx) => {
+    const text = th.textContent.trim().toLowerCase();
+    if (text === 'actions' || text === '' || th.dataset.sortable === 'false') return;
+
+    th.addEventListener('click', () => {
+      const colKey = th.dataset.sortKey !== undefined ? th.dataset.sortKey : idx;
+      if (activeCol === colKey || activeCol === idx) {
+        activeDir = activeDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        activeCol = colKey;
+        activeDir = 'asc';
+      }
+      updateHeaderUI();
+      if (typeof options.onSort === 'function') {
+        options.onSort(activeCol, activeDir, th.dataset.sortKey !== undefined ? th.dataset.sortKey : idx);
+      } else {
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+          const cellA = (a.children[idx]?.textContent || '').trim();
+          const cellB = (b.children[idx]?.textContent || '').trim();
+          const numA = parseFloat(cellA.replace(/[$,%]/g, ''));
+          const numB = parseFloat(cellB.replace(/[$,%]/g, ''));
+          const isNum = !isNaN(numA) && !isNaN(numB) && cellA.replace(/[$,%.-]/g, '').trim() !== '';
+          const valA = isNum ? numA : cellA.toLowerCase();
+          const valB = isNum ? numB : cellB.toLowerCase();
+          if (valA < valB) return activeDir === 'asc' ? -1 : 1;
+          if (valA > valB) return activeDir === 'asc' ? 1 : -1;
+          return 0;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+      }
+    });
+  });
+
+  updateHeaderUI();
+
+  return {
+    getSortState: () => ({ col: activeCol, dir: activeDir }),
+    setSortState: (col, dir) => {
+      activeCol = col;
+      activeDir = dir;
+      updateHeaderUI();
+    },
+    updateUI: updateHeaderUI
+  };
+};
+
 window.PricingEngine = {
   // Method 1: Fetch Live/Current Cost dynamically from SKU catalog and inventory
   getLiveCost: function(bomItems, skuCatalog, inventoryCache) {

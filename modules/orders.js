@@ -10,6 +10,9 @@
   var editId=null;
   var lines=[]; // Active items in the form
   var panel=null;
+  var ordSortCol = 'orderNumber';
+  var ordSortDir = 'desc';
+  var ordSortController = null;
 
   function g(id){return document.getElementById(id);}
 
@@ -62,9 +65,17 @@
               <div class="search-box"><input type="text" id="ord-search" placeholder="Search orders by number, source, name..."></div>
             </div>
             <div class="table-wrap">
-              <table>
+              <table id="ord-table">
                 <thead>
-                  <tr><th>Order Num</th><th>Customer</th><th>Source</th><th>Status</th><th>Total Value</th><th>Profit Margin</th><th style="width:70px">Actions</th></tr>
+                  <tr>
+                    <th data-sort-key="orderNumber">Order Num</th>
+                    <th data-sort-key="customerName">Customer</th>
+                    <th data-sort-key="source">Source</th>
+                    <th data-sort-key="status">Status</th>
+                    <th data-sort-key="total">Total Value</th>
+                    <th data-sort-key="profit">Profit Margin</th>
+                    <th style="width:70px">Actions</th>
+                  </tr>
                 </thead>
                 <tbody id="ord-tbody"></tbody>
               </table>
@@ -413,6 +424,18 @@
     });
     g('ord-cancel-btn').addEventListener('click',function(){clearForm();switchTab('list');});
     g('ord-search').addEventListener('input',renderList);
+
+    if (window.makeTableSortable) {
+      ordSortController = window.makeTableSortable('ord-table', {
+        defaultCol: 'orderNumber',
+        defaultDir: 'desc',
+        onSort: function(colKey, dir) {
+          ordSortCol = colKey;
+          ordSortDir = dir;
+          renderList();
+        }
+      });
+    }
   }
 
   async function autoDeductInventoryForLines(lineItems) {
@@ -611,7 +634,23 @@
     var tbody=g('ord-tbody');if(!tbody)return;
     tbody.innerHTML='';
 
-    orders.forEach(function(o){
+    var list = [...orders];
+
+    list.sort(function(a, b) {
+      var valA, valB;
+      if (ordSortCol === 'customerName') { valA = (a.customerName || '').toLowerCase(); valB = (b.customerName || '').toLowerCase(); }
+      else if (ordSortCol === 'source') { valA = (a.source || '').toLowerCase(); valB = (b.source || '').toLowerCase(); }
+      else if (ordSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else if (ordSortCol === 'total') { valA = Number(a.total || 0); valB = Number(b.total || 0); }
+      else if (ordSortCol === 'profit') { valA = Number(a.profit || 0); valB = Number(b.profit || 0); }
+      else { valA = (a.orderNumber || '').toLowerCase(); valB = (b.orderNumber || '').toLowerCase(); }
+
+      if (valA < valB) return ordSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return ordSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    list.forEach(function(o){
       const ext = o.externalId || '';
       if(q && !o.orderNumber.toLowerCase().includes(q) && !o.customerName.toLowerCase().includes(q) && !o.source.toLowerCase().includes(q) && !ext.toLowerCase().includes(q))return;
       var tr=document.createElement('tr');

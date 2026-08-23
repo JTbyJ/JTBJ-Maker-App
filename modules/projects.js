@@ -65,7 +65,7 @@
       '<select id="proj-cat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px"><option value="">All Categories</option><option>Sublimation</option><option>3D Print</option><option>Resin</option><option>Candle</option><option>Soap</option><option>Bath Bomb</option><option>Vinyl / HTV</option><option>Embroidery</option><option>Mixed</option><option>Other</option></select>'+
       '<select id="proj-stat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px"><option value="">All Statuses</option><option>Idea</option><option>In Progress</option><option>Completed</option><option>Sold</option><option>Gifted</option><option>Cancelled</option></select>'+
     '</div>'+
-    '<div class="table-wrap"><table><thead><tr><th>Project Name</th><th>Category</th><th>Status</th><th>Start</th><th>End</th><th>Mat Cost</th><th>Labour</th><th>Revenue</th><th>Profit</th><th>Actions</th></tr></thead><tbody id="proj-tbody"></tbody></table></div>'+
+    '<div class="table-wrap"><table id="proj-table"><thead><tr><th data-sort-key="name">Project Name</th><th data-sort-key="category">Category</th><th data-sort-key="status">Status</th><th data-sort-key="startDate">Start</th><th data-sort-key="endDate">End</th><th data-sort-key="matCost">Mat Cost</th><th data-sort-key="labCost">Labour</th><th data-sort-key="revenue">Revenue</th><th data-sort-key="profit">Profit</th><th style="width:70px">Actions</th></tr></thead><tbody id="proj-tbody"></tbody></table></div>'+
 
     /* MODAL WINDOW FOR DETAILS */
     '<div id="proj-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center">'+
@@ -129,6 +129,9 @@
   var items=[],editId=null,modalId=null;
   var activeBom = []; // Temporary BOM for active project builder
   var inventory = [];
+  var projSortCol = 'name';
+  var projSortDir = 'asc';
+  var projSortController = null;
 
   function g(id){return document.getElementById(id);}
   function esc(v){return String(v===undefined||v===null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -479,6 +482,19 @@
   async function load(){
     await loadInventory();
     items=await window.makerAPI.readData(FILE)||[];
+
+    if (window.makeTableSortable) {
+      projSortController = window.makeTableSortable('proj-table', {
+        defaultCol: 'name',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          projSortCol = colKey;
+          projSortDir = dir;
+          render();
+        }
+      });
+    }
+
     render();
   }
   async function sv(){await window.makerAPI.writeData(FILE,items);}
@@ -495,8 +511,29 @@
     var netProfit=items.reduce(function(s,i){return s+Number(i.revenue||0)-Number(i.matCost||0)-Number(i.labCost||0);},0);
     var pel=g('proj-profit');pel.textContent='$'+netProfit.toFixed(2);pel.style.color=netProfit>=0?'var(--green)':'var(--red)';
     var sc={Idea:'badge-muted','In Progress':'badge-accent',Completed:'badge-green',Sold:'badge-teal',Gifted:'badge-gold',Cancelled:'badge-red'};
-    if(fi.length===0){g('proj-tbody').innerHTML='<tr><td colspan="10" class="empty-state"><p>No projects yet.</p></td></tr>';return;}
-    g('proj-tbody').innerHTML=fi.map(function(i){
+    var sortedFi = [...fi];
+    sortedFi.sort(function(a, b) {
+      var profitA = Number(a.revenue || 0) - Number(a.matCost || 0) - Number(a.labCost || 0);
+      var profitB = Number(b.revenue || 0) - Number(b.matCost || 0) - Number(b.labCost || 0);
+
+      var valA, valB;
+      if (projSortCol === 'category') { valA = (a.category || '').toLowerCase(); valB = (b.category || '').toLowerCase(); }
+      else if (projSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else if (projSortCol === 'startDate') { valA = (a.startDate || '').toLowerCase(); valB = (b.startDate || '').toLowerCase(); }
+      else if (projSortCol === 'endDate') { valA = (a.endDate || '').toLowerCase(); valB = (b.endDate || '').toLowerCase(); }
+      else if (projSortCol === 'matCost') { valA = Number(a.matCost || 0); valB = Number(b.matCost || 0); }
+      else if (projSortCol === 'labCost') { valA = Number(a.labCost || 0); valB = Number(b.labCost || 0); }
+      else if (projSortCol === 'revenue') { valA = Number(a.revenue || 0); valB = Number(b.revenue || 0); }
+      else if (projSortCol === 'profit') { valA = profitA; valB = profitB; }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return projSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return projSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    if(sortedFi.length===0){g('proj-tbody').innerHTML='<tr><td colspan="10" class="empty-state"><p>No projects yet.</p></td></tr>';return;}
+    g('proj-tbody').innerHTML=sortedFi.map(function(i){
       var profit=Number(i.revenue||0)-Number(i.matCost||0)-Number(i.labCost||0);
       return '<tr data-id="'+i.id+'" style="cursor:pointer" title="Click row to view details">'+
         '<td style="font-weight:600">'+esc(i.name)+'</td><td>'+esc(i.category||'')+'</td>'+
