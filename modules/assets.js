@@ -58,7 +58,7 @@
         '<select id="hw-cat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px"><option value="">All Categories</option><option>3D Printer</option><option>Laser Engraver</option><option>Vinyl / Craft Cutter</option><option>Sublimation Printer</option><option>Inkjet Printer</option><option>Colour Laser MFP</option><option>Inkjet MFP</option><option>Creative Tool</option><option>Tablet</option><option>Computer</option><option>Camera</option><option>Other</option></select>'+
         '<select id="hw-stat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px"><option value="">All Statuses</option><option>Active</option><option>Offline</option><option>In Repair</option><option>Retired</option></select>'+
       '</div>'+
-      '<div class="table-wrap"><table><thead><tr><th>Equipment</th><th>Category</th><th>Brand / Model</th><th>Serial #</th><th>Purchase Date</th><th>Price</th><th>Warranty</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="hw-tbody"></tbody></table></div>'+
+      '<div class="table-wrap"><table id="hw-table"><thead><tr><th data-sort-key="name">Equipment</th><th data-sort-key="category">Category</th><th data-sort-key="brand">Brand / Model</th><th data-sort-key="serial">Serial #</th><th data-sort-key="purchaseDate">Purchase Date</th><th data-sort-key="price">Price</th><th data-sort-key="warranty">Warranty</th><th data-sort-key="status">Status</th><th data-sort-key="notes">Notes</th><th style="width:70px">Actions</th></tr></thead><tbody id="hw-tbody"></tbody></table></div>'+
     '</div>'+
 
     '<div id="ast-sw-pane" style="display:none">'+
@@ -94,7 +94,7 @@
         '<select id="sw-type-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px"><option value="">All Types</option><option>Subscription</option><option>One-Time</option><option>Free</option><option>Trial</option><option>Open Source</option></select>'+
         '<select id="sw-stat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:13px"><option value="">All Statuses</option><option>Active</option><option>Inactive</option><option>Cancelled</option><option>Trial</option></select>'+
       '</div>'+
-      '<div class="table-wrap"><table><thead><tr><th>Platform</th><th>Purpose</th><th>License</th><th>Login</th><th>Cost</th><th>Billing</th><th>Renewal</th><th>Status</th><th>Actions</th></tr></thead><tbody id="sw-tbody"></tbody></table></div>'+
+      '<div class="table-wrap"><table id="sw-table"><thead><tr><th data-sort-key="name">Platform</th><th data-sort-key="purpose">Purpose</th><th data-sort-key="licenseType">License</th><th data-sort-key="loginEmail">Login</th><th data-sort-key="cost">Cost</th><th data-sort-key="billingCycle">Billing</th><th data-sort-key="renewalDate">Renewal</th><th data-sort-key="status">Status</th><th style="width:70px">Actions</th></tr></thead><tbody id="sw-tbody"></tbody></table></div>'+
     '</div>'+
 
     '<div id="ast-hw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center">'+
@@ -122,6 +122,10 @@
   frame.appendChild(panel);
 
   var hwItems=[],swItems=[],hwEditId=null,swEditId=null,hwModalId=null,swModalId=null;
+  var hwSortCol = 'name';
+  var hwSortDir = 'asc';
+  var swSortCol = 'name';
+  var swSortDir = 'asc';
   function g(id){return document.getElementById(id);}
   function esc(v){return String(v===undefined||v===null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function mf(label,val){
@@ -249,6 +253,28 @@
     swItems=await window.makerAPI.readData(SW_FILE)||[];
     if(hwItems.length===0){hwItems=HW_SEED;await window.makerAPI.writeData(HW_FILE,hwItems);}
     if(swItems.length===0){swItems=SW_SEED;await window.makerAPI.writeData(SW_FILE,swItems);}
+
+    if (window.makeTableSortable) {
+      window.makeTableSortable('hw-table', {
+        defaultCol: 'name',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          hwSortCol = colKey;
+          hwSortDir = dir;
+          renderHw();
+        }
+      });
+      window.makeTableSortable('sw-table', {
+        defaultCol: 'name',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          swSortCol = colKey;
+          swSortDir = dir;
+          renderSw();
+        }
+      });
+    }
+
     renderHw();renderSw();
   }
 
@@ -267,8 +293,26 @@
       return days>=0&&days<=90;
     }).length;
     var sc={Active:'badge-green',Offline:'badge-red','In Repair':'badge-gold',Retired:'badge-muted'};
-    if(fi.length===0){g('hw-tbody').innerHTML='<tr><td colspan="10" class="empty-state"><p>No equipment yet.</p></td></tr>';return;}
-    g('hw-tbody').innerHTML=fi.map(function(i){
+    var sortedFi = [...fi];
+    sortedFi.sort(function(a, b) {
+      var valA, valB;
+      if (hwSortCol === 'category') { valA = (a.category || '').toLowerCase(); valB = (b.category || '').toLowerCase(); }
+      else if (hwSortCol === 'brand') { valA = ((a.brand||'') + (a.model||'')).toLowerCase(); valB = ((b.brand||'') + (b.model||'')).toLowerCase(); }
+      else if (hwSortCol === 'serial') { valA = (a.serial || '').toLowerCase(); valB = (b.serial || '').toLowerCase(); }
+      else if (hwSortCol === 'purchaseDate') { valA = (a.purchaseDate || '').toLowerCase(); valB = (b.purchaseDate || '').toLowerCase(); }
+      else if (hwSortCol === 'price') { valA = Number(a.price || 0); valB = Number(b.price || 0); }
+      else if (hwSortCol === 'warranty') { valA = (a.warranty || '').toLowerCase(); valB = (b.warranty || '').toLowerCase(); }
+      else if (hwSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else if (hwSortCol === 'notes') { valA = (a.notes || '').toLowerCase(); valB = (b.notes || '').toLowerCase(); }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return hwSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return hwSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    if(sortedFi.length===0){g('hw-tbody').innerHTML='<tr><td colspan="10" class="empty-state"><p>No equipment yet.</p></td></tr>';return;}
+    g('hw-tbody').innerHTML=sortedFi.map(function(i){
       return '<tr data-id="'+i.id+'" style="cursor:pointer" title="Click row to view details">'+
         '<td style="font-weight:600">'+esc(i.name)+'</td>'+
         '<td>'+esc(i.category)+'</td>'+
@@ -326,8 +370,25 @@
       return days>=0&&days<=30;
     }).length;
     var sc={Active:'badge-green',Inactive:'badge-muted',Cancelled:'badge-red',Trial:'badge-gold'};
-    if(fi.length===0){g('sw-tbody').innerHTML='<tr><td colspan="9" class="empty-state"><p>No accounts yet.</p></td></tr>';return;}
-    g('sw-tbody').innerHTML=fi.map(function(i){
+    var sortedFi = [...fi];
+    sortedFi.sort(function(a, b) {
+      var valA, valB;
+      if (swSortCol === 'purpose') { valA = (a.purpose || '').toLowerCase(); valB = (b.purpose || '').toLowerCase(); }
+      else if (swSortCol === 'licenseType') { valA = (a.licenseType || '').toLowerCase(); valB = (b.licenseType || '').toLowerCase(); }
+      else if (swSortCol === 'loginEmail') { valA = (a.loginEmail || '').toLowerCase(); valB = (b.loginEmail || '').toLowerCase(); }
+      else if (swSortCol === 'cost') { valA = Number(a.cost || 0); valB = Number(b.cost || 0); }
+      else if (swSortCol === 'billingCycle') { valA = (a.billingCycle || '').toLowerCase(); valB = (b.billingCycle || '').toLowerCase(); }
+      else if (swSortCol === 'renewalDate') { valA = (a.renewalDate || '').toLowerCase(); valB = (b.renewalDate || '').toLowerCase(); }
+      else if (swSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return swSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return swSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    if(sortedFi.length===0){g('sw-tbody').innerHTML='<tr><td colspan="9" class="empty-state"><p>No accounts yet.</p></td></tr>';return;}
+    g('sw-tbody').innerHTML=sortedFi.map(function(i){
       return '<tr data-id="'+i.id+'" style="cursor:pointer" title="Click row to view details">'+
         '<td style="font-weight:600">'+esc(i.name)+'</td>'+
         '<td>'+esc(i.purpose||'')+'</td>'+

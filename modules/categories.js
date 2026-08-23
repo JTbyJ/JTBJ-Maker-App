@@ -11,6 +11,9 @@ window.OSOT_CATS = null;
   const FILE = 'categories.json';
   let items = [];
   let editId = null;
+  let catSortCol = 'label';
+  let catSortDir = 'asc';
+  let catSortController = null;
 
   function g(id) { return document.getElementById(id); }
 
@@ -93,12 +96,12 @@ window.OSOT_CATS = null;
               <button class="btn btn-ghost btn-sm" onclick="loadCategories(true)">🔄 Sync From Sheet</button>
             </div>
             <div class="table-wrap">
-              <table>
+              <table id="cat-table">
                 <thead>
                   <tr>
-                    <th>Category</th>
-                    <th>Code</th>
-                    <th>Subcategories</th>
+                    <th data-sort-key="label">Category</th>
+                    <th data-sort-key="code">Code</th>
+                    <th data-sort-key="subs">Subcategories</th>
                     <th style="width:90px; text-align:right;">Actions</th>
                   </tr>
                 </thead>
@@ -113,6 +116,18 @@ window.OSOT_CATS = null;
       frame.appendChild(p);
     }
     loadCategories(false);
+
+    if (window.makeTableSortable) {
+      catSortController = window.makeTableSortable('cat-table', {
+        defaultCol: 'label',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          catSortCol = colKey;
+          catSortDir = dir;
+          renderCatTable();
+        }
+      });
+    }
   };
 
   /**
@@ -307,7 +322,20 @@ window.OSOT_CATS = null;
       return;
     }
 
-    tbody.innerHTML = items.map(it => {
+    let list = [...items];
+
+    list.sort((a, b) => {
+      let valA, valB;
+      if (catSortCol === 'code') { valA = (a.code || '').toLowerCase(); valB = (b.code || '').toLowerCase(); }
+      else if (catSortCol === 'subs') { valA = Object.values(a.subs || {}).join(', ').toLowerCase(); valB = Object.values(b.subs || {}).join(', ').toLowerCase(); }
+      else { valA = (a.label || '').toLowerCase(); valB = (b.label || '').toLowerCase(); }
+
+      if (valA < valB) return catSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return catSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    tbody.innerHTML = list.map(it => {
       const subLabels = Object.values(it.subs).join(', ') || '—';
       const badgeStyle = `background:${it.color}; color:#fff; padding:2px 8px; border-radius:6px; font-weight:700; font-size:11px;`;
       return `

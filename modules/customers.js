@@ -10,6 +10,9 @@ window.__customerCache = null;
 (function() {
   let currentEditId = null;
   let placeAutocomplete = null;
+  let custSortCol = 'name';
+  let custSortDir = 'asc';
+  let custSortController = null;
 
   /**
    * Phone Number Formatter
@@ -415,14 +418,14 @@ window.__customerCache = null;
           </div>
 
           <div class="table-wrap" style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
+            <table id="cust-table" style="width: 100%; border-collapse: collapse;">
               <thead>
                 <tr>
-                  <th>CUSTOMER</th>
-                  <th>CONTACT & ADDRESS</th>
-                  <th>TAG</th>
-                  <th>FINISH PREF</th>
-                  <th>NOTES</th>
+                  <th data-sort-key="name">CUSTOMER</th>
+                  <th data-sort-key="contact">CONTACT & ADDRESS</th>
+                  <th data-sort-key="type">TAG</th>
+                  <th data-sort-key="finish">FINISH PREF</th>
+                  <th data-sort-key="notes">NOTES</th>
                   <th style="text-align: right;">ACTIONS</th>
                 </tr>
               </thead>
@@ -586,7 +589,22 @@ window.__customerCache = null;
       return;
     }
 
-    tbody.innerHTML = data.map(cust => {
+    let list = [...data];
+
+    list.sort((a, b) => {
+      let valA, valB;
+      if (custSortCol === 'contact') { valA = (a.email || a.phone || a.address || '').toLowerCase(); valB = (b.email || b.phone || b.address || '').toLowerCase(); }
+      else if (custSortCol === 'type') { valA = (a.type || '').toLowerCase(); valB = (b.type || '').toLowerCase(); }
+      else if (custSortCol === 'finish') { valA = (a.finishPref || '').toLowerCase(); valB = (b.finishPref || '').toLowerCase(); }
+      else if (custSortCol === 'notes') { valA = (a.notes || '').toLowerCase(); valB = (b.notes || '').toLowerCase(); }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return custSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return custSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    tbody.innerHTML = list.map(cust => {
       const tagClass = (cust.type || 'Personal').toLowerCase();
       const igDisplay = cust.igHandle ? (cust.igHandle.startsWith('@') ? cust.igHandle : '@' + cust.igHandle) : '';
       const formattedPhone = formatPhoneNumber(cust.phone);

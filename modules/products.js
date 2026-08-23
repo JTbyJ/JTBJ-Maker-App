@@ -12,6 +12,9 @@ window.__productsCache = null;
   var invList=[];
   var editId=null;
   var bomList=[]; // Temporary array of BOM items during product creation/edit
+  var sortCol='name';
+  var sortDir='asc';
+  var sortController=null;
 
   function g(id){return document.getElementById(id);}
 
@@ -63,9 +66,17 @@ window.__productsCache = null;
               <div class="search-box"><input type="text" id="prod-search" placeholder="Search products..."></div>
             </div>
             <div class="table-wrap">
-              <table>
+              <table id="prod-table">
                 <thead>
-                  <tr><th>Product Details</th><th>SKU</th><th>Labor + Mat.</th><th>COGS</th><th>Price</th><th>Profit</th><th style="width:70px">Actions</th></tr>
+                  <tr>
+                    <th data-sort-key="name">Product Details</th>
+                    <th data-sort-key="sku">SKU</th>
+                    <th data-sort-key="cogs">Labor + Mat.</th>
+                    <th data-sort-key="cogs">COGS</th>
+                    <th data-sort-key="price">Price</th>
+                    <th data-sort-key="profit">Profit</th>
+                    <th style="width:70px">Actions</th>
+                  </tr>
                 </thead>
                 <tbody id="prod-tbody"></tbody>
               </table>
@@ -489,7 +500,7 @@ window.__productsCache = null;
     g('prod-sync-btn').addEventListener('click', async function() {
       g('prod-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:20px;">Syncing products with Google Sheets...</td></tr>';
       window.__productsCache = null;
-      await load();
+      await load(true);
     });
 
     g('prod-form').addEventListener('submit',async function(e){
@@ -564,6 +575,18 @@ window.__productsCache = null;
     });
     g('prod-cancel-btn').addEventListener('click',function(){clearBuildForm();switchTab('list');});
     g('prod-search').addEventListener('input',renderList);
+
+    if (window.makeTableSortable) {
+      sortController = window.makeTableSortable('prod-table', {
+        defaultCol: 'name',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          sortCol = colKey;
+          sortDir = dir;
+          renderList();
+        }
+      });
+    }
 
     // Watch labor changes to live-calc
     ['p-lab-hrs','p-lab-rate','p-price','p-fee'].forEach(function(id){
@@ -723,7 +746,7 @@ window.__productsCache = null;
     });
   }
 
-  async function load(){
+  async function load(forceRefresh = false){
     await loadInventory();
     await populateProductCats();
 
@@ -877,7 +900,30 @@ window.__productsCache = null;
     // Read current live cache from inventory to calculate up-to-date COGS metrics
     var currentInventory = window.__inventoryCache || [];
 
-    products.forEach(function(p){
+    var list = [...products];
+
+    // Apply Sorting
+    list.sort(function(a, b) {
+      var matA = window.PricingEngine.getLiveCost(a.bom, window.__skuCatalogCache, currentInventory);
+      var matB = window.PricingEngine.getLiveCost(b.bom, window.__skuCatalogCache, currentInventory);
+      var cogsA = matA + Number(a.labourCost || 0) + Number(a.etsyFee || 0);
+      var cogsB = matB + Number(b.labourCost || 0) + Number(b.etsyFee || 0);
+      var profitA = (a.salePrice || 0) - cogsA;
+      var profitB = (b.salePrice || 0) - cogsB;
+
+      var valA, valB;
+      if (sortCol === 'sku') { valA = (a.sku || '').toLowerCase(); valB = (b.sku || '').toLowerCase(); }
+      else if (sortCol === 'price') { valA = Number(a.salePrice || 0); valB = Number(b.salePrice || 0); }
+      else if (sortCol === 'cogs') { valA = cogsA; valB = cogsB; }
+      else if (sortCol === 'profit') { valA = profitA; valB = profitB; }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    list.forEach(function(p){
       if(q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q))return;
 
       // Recalculate materials dynamically based on live inventory per-unit cost using the Centralized Pricing Engine

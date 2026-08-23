@@ -4,6 +4,9 @@
 
 // Global cache to persist data in memory across tab switches
 window.__inventoryCache = null;
+let invSortCol = 'name';
+let invSortDir = 'asc';
+let invSortController = null;
 
 // Primary module initializer called by main navigation
 window.__makerInit_inventory = function () {
@@ -173,16 +176,16 @@ window.__makerInit_inventory = function () {
         </div>
 
         <div class="table-wrap">
-          <table>
+          <table id="inv-table">
             <thead>
               <tr>
-                <th>SKU / Name</th>
-                <th>Category</th>
-                <th>Type / Specs / Metric</th>
-                <th>Qty</th>
-                <th>Rep. Cost</th>
-                <th>Unit Cost</th>
-                <th>Location</th>
+                <th data-sort-key="name">SKU / Name</th>
+                <th data-sort-key="cat">Category</th>
+                <th data-sort-key="type">Type / Specs / Metric</th>
+                <th data-sort-key="qty">Qty</th>
+                <th data-sort-key="cost">Rep. Cost</th>
+                <th data-sort-key="unitcost">Unit Cost</th>
+                <th data-sort-key="location">Location</th>
                 <th style="text-align: right; width: 140px;">Actions</th>
               </tr>
             </thead>
@@ -231,6 +234,18 @@ window.__makerInit_inventory = function () {
   loadInventory(false);
   prepareInventoryForm(null);
   populateInventoryCatFilter();
+
+  if (window.makeTableSortable) {
+    invSortController = window.makeTableSortable('inv-table', {
+      defaultCol: 'name',
+      defaultDir: 'asc',
+      onSort: function(colKey, dir) {
+        invSortCol = colKey;
+        invSortDir = dir;
+        filterInventory();
+      }
+    });
+  }
 };
 
 async function populateInventoryCatFilter() {
@@ -517,7 +532,36 @@ function renderInventoryTable(items) {
   // Read SKU catalog to look up up-to-date metadata dynamically (SSOT resolution)
   let skuCatalog = window.__skuCatalogCache || [];
 
-  tbody.innerHTML = items.map(item => {
+  let sortedItems = [...items];
+
+  sortedItems.sort((a, b) => {
+    const resolvedSkuA = skuCatalog.find(s => s.sku === a.sku);
+    const resolvedSkuB = skuCatalog.find(s => s.sku === b.sku);
+    const nameA = resolvedSkuA ? resolvedSkuA.name : a.name;
+    const nameB = resolvedSkuB ? resolvedSkuB.name : b.name;
+    const catA = resolvedSkuA ? resolvedSkuA.cat : a.cat;
+    const catB = resolvedSkuB ? resolvedSkuB.cat : b.cat;
+
+    const repCostA = resolvedSkuA ? Number(resolvedSkuA.cost || 0) : Number(a.cost || 0);
+    const repCostB = resolvedSkuB ? Number(resolvedSkuB.cost || 0) : Number(b.cost || 0);
+    const unitCostA = repCostA / Number(a.metricCapacity || 1);
+    const unitCostB = repCostB / Number(b.metricCapacity || 1);
+
+    let valA, valB;
+    if (invSortCol === 'cat') { valA = (catA || '').toLowerCase(); valB = (catB || '').toLowerCase(); }
+    else if (invSortCol === 'type') { valA = (a.type || '').toLowerCase(); valB = (b.type || '').toLowerCase(); }
+    else if (invSortCol === 'qty') { valA = Number(a.qty || 0); valB = Number(b.qty || 0); }
+    else if (invSortCol === 'cost') { valA = repCostA; valB = repCostB; }
+    else if (invSortCol === 'unitcost') { valA = unitCostA; valB = unitCostB; }
+    else if (invSortCol === 'location') { valA = (a.location || '').toLowerCase(); valB = (b.location || '').toLowerCase(); }
+    else { valA = (nameA || '').toLowerCase(); valB = (nameB || '').toLowerCase(); }
+
+    if (valA < valB) return invSortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return invSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  tbody.innerHTML = sortedItems.map(item => {
     // Resolve metadata dynamically from master SKU catalog if possible
     const resolvedSku = skuCatalog.find(s => s.sku === item.sku);
     const resolvedName = resolvedSku ? resolvedSku.name : item.name;

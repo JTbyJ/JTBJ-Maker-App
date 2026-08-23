@@ -212,8 +212,8 @@
         '<option>Active</option><option>Draft</option><option>Discontinued</option>'+
       '</select>'+
     '</div>'+
-    '<div class="table-wrap"><table><thead><tr>'+
-      '<th>Photo</th><th>SKU</th><th>Product Name</th><th>Classification</th><th>CAT</th><th>Brand</th><th>Supplier</th><th>Cost</th><th>Price</th><th>COGS</th><th>Retail</th><th>Margin</th><th>Status</th><th>Actions</th>'+
+    '<div class="table-wrap"><table id="sku-table"><thead><tr>'+
+      '<th data-sortable="false">Photo</th><th data-sort-key="sku">SKU</th><th data-sort-key="name">Product Name</th><th data-sort-key="classification">Classification</th><th data-sort-key="cat">CAT</th><th data-sort-key="brand">Brand</th><th data-sort-key="supplier">Supplier</th><th data-sort-key="cost">Cost</th><th data-sort-key="price">Price</th><th data-sort-key="cogs">COGS</th><th data-sort-key="retail">Retail</th><th data-sort-key="margin">Margin</th><th data-sort-key="status">Status</th><th style="width:70px">Actions</th>'+
     '</tr></thead><tbody id="sku-tbody"></tbody></table></div>' +
     '';
 
@@ -221,6 +221,9 @@
 
   var items=[],editId=null;
   var customBrands = []; // Additional brands entered by user locally
+  var skuSortCol = 'sku';
+  var skuSortDir = 'asc';
+  var skuSortController = null;
   function $(id){return document.getElementById(id);}
 
   /* ── PREVIEW BUILDER ── */
@@ -481,6 +484,19 @@
     await loadSuppliers();
     await runSkuMigration();
     buildPreview();
+
+    if (window.makeTableSortable) {
+      skuSortController = window.makeTableSortable('sku-table', {
+        defaultCol: 'sku',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          skuSortCol = colKey;
+          skuSortDir = dir;
+          render();
+        }
+      });
+    }
+
     render();
   }
 
@@ -510,7 +526,31 @@
     /* Status badge colours */
     var sc={Active:'badge-green',Draft:'badge-muted',Discontinued:'badge-red'};
 
-    $('sku-tbody').innerHTML=fi.length?fi.map(function(i){
+    var sortedFi = [...fi];
+    sortedFi.sort(function(a, b) {
+      var marginA = (a.price && a.cost) ? ((Number(a.price) - Number(a.cost)) / Number(a.price) * 100) : 0;
+      var marginB = (b.price && b.cost) ? ((Number(b.price) - Number(b.cost)) / Number(b.price) * 100) : 0;
+
+      var valA, valB;
+      if (skuSortCol === 'name') { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+      else if (skuSortCol === 'classification') { valA = (a.classification || '').toLowerCase(); valB = (b.classification || '').toLowerCase(); }
+      else if (skuSortCol === 'cat') { valA = (a.cat || '').toLowerCase(); valB = (b.cat || '').toLowerCase(); }
+      else if (skuSortCol === 'brand') { valA = (a.brand || '').toLowerCase(); valB = (b.brand || '').toLowerCase(); }
+      else if (skuSortCol === 'supplier') { valA = (a.supplier || '').toLowerCase(); valB = (b.supplier || '').toLowerCase(); }
+      else if (skuSortCol === 'cost') { valA = Number(a.cost || 0); valB = Number(b.cost || 0); }
+      else if (skuSortCol === 'price') { valA = Number(a.price || 0); valB = Number(b.price || 0); }
+      else if (skuSortCol === 'cogs') { valA = Number(a.cogs || 0); valB = Number(b.cogs || 0); }
+      else if (skuSortCol === 'retail') { valA = Number(a.retail || 0); valB = Number(b.retail || 0); }
+      else if (skuSortCol === 'margin') { valA = marginA; valB = marginB; }
+      else if (skuSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else { valA = (a.sku || '').toLowerCase(); valB = (b.sku || '').toLowerCase(); }
+
+      if (valA < valB) return skuSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return skuSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    $('sku-tbody').innerHTML=sortedFi.length?sortedFi.map(function(i){
       var catInfo=OSOT_CATS[i.cat]||{label:i.cat||'—',color:'var(--text-muted)'};
       var catBadge='<span style="background:'+catInfo.color+';color:#fff;border-radius:5px;padding:2px 7px;font-size:11px;font-weight:800;font-family:monospace">'+
         (i.cat||'?')+'</span>';

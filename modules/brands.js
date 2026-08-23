@@ -8,6 +8,9 @@ window.__brandsCache = null;
 (function() {
   var FILE = 'brands.json';
   var editId = null;
+  var brandSortCol = 'name';
+  var brandSortDir = 'asc';
+  var brandSortController = null;
 
   var DEFAULT_BRANDS = [
     { id: 'b_1', name: 'Creality', code: 'CRE', website: 'creality.com', status: 'Active', notes: 'Major filament and printer manufacturer' },
@@ -110,14 +113,14 @@ window.__brandsCache = null;
         '      </div>' +
         '    </div>' +
         '    <div class="table-wrap">' +
-        '      <table>' +
+        '      <table id="brand-table">' +
         '        <thead>' +
         '          <tr>' +
-        '            <th>Code</th>' +
-        '            <th>Brand Name</th>' +
-        '            <th>Website</th>' +
-        '            <th>Status</th>' +
-        '            <th>Notes</th>' +
+        '            <th data-sort-key="code">Code</th>' +
+        '            <th data-sort-key="name">Brand Name</th>' +
+        '            <th data-sort-key="website">Website</th>' +
+        '            <th data-sort-key="status">Status</th>' +
+        '            <th data-sort-key="notes">Notes</th>' +
         '            <th style="text-align:right;">Actions</th>' +
         '          </tr>' +
         '        </thead>' +
@@ -131,9 +134,21 @@ window.__brandsCache = null;
 
     attachBrandEvents();
     await loadBrands(false);
+
+    if (window.makeTableSortable) {
+      brandSortController = window.makeTableSortable('brand-table', {
+        defaultCol: 'name',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          brandSortCol = colKey;
+          brandSortDir = dir;
+          renderBrandsTable();
+        }
+      });
+    }
   };
 
-  async function loadBrands(forceRefresh) {
+  async function loadBrands(forceRefresh = false) {
     if (!forceRefresh && window.__brandsCache && Array.isArray(window.__brandsCache)) {
       renderBrandsTable();
       return;
@@ -255,7 +270,21 @@ window.__brandsCache = null;
       return;
     }
 
-    tbody.innerHTML = filtered.map(function(b) {
+    var sorted = [...filtered];
+    sorted.sort(function(a, b) {
+      var valA, valB;
+      if (brandSortCol === 'code') { valA = (a.code || getBrandCode(a.name) || '').toLowerCase(); valB = (b.code || getBrandCode(b.name) || '').toLowerCase(); }
+      else if (brandSortCol === 'website') { valA = (a.website || '').toLowerCase(); valB = (b.website || '').toLowerCase(); }
+      else if (brandSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else if (brandSortCol === 'notes') { valA = (a.notes || '').toLowerCase(); valB = (b.notes || '').toLowerCase(); }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return brandSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return brandSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    tbody.innerHTML = sorted.map(function(b) {
       var badgeClass = b.status === 'Active' ? 'badge-green' : 'badge-muted';
       var webLink = b.website ? '<a href="https://' + escapeHtml(b.website) + '" target="_blank" style="color:var(--accent); text-decoration:none;">🌐 ' + escapeHtml(b.website) + '</a>' : '—';
 

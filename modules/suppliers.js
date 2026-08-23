@@ -9,6 +9,9 @@ window.__suppliersCache = null;
   var FILE = 'suppliers.json';
   var editId = null;
   var modalId = null;
+  var supSortCol = 'name';
+  var supSortDir = 'asc';
+  var supSortController = null;
   var frame = document.getElementById('module-frame');
   var panel = document.createElement('div');
   panel.id = 'panel-suppliers';
@@ -129,8 +132,8 @@ window.__suppliersCache = null;
     '</div>' +
 
     /* TABLE */
-    '<div class="table-wrap"><table><thead><tr>' +
-      '<th>Name</th><th>Category</th><th>Status</th><th>Rating</th><th>Website</th><th>Contact</th><th>Phone</th><th>Actions</th>' +
+    '<div class="table-wrap"><table id="sup-table"><thead><tr>' +
+      '<th data-sort-key="name">Name</th><th data-sort-key="category">Category</th><th data-sort-key="status">Status</th><th data-sort-key="rating">Rating</th><th data-sort-key="website">Website</th><th data-sort-key="contact">Contact</th><th data-sort-key="phone">Phone</th><th style="width:70px">Actions</th>' +
     '</tr></thead><tbody id="sup-tbody"></tbody></table></div>' +
 
     /* DETAILS MODAL */
@@ -260,6 +263,19 @@ window.__suppliersCache = null;
     }
 
     window.__suppliersCache = localData;
+
+    if (window.makeTableSortable) {
+      supSortController = window.makeTableSortable('sup-table', {
+        defaultCol: 'name',
+        defaultDir: 'asc',
+        onSort: function(colKey, dir) {
+          supSortCol = colKey;
+          supSortDir = dir;
+          render();
+        }
+      });
+    }
+
     render();
 
     if (forceRefresh) {
@@ -298,7 +314,23 @@ window.__suppliersCache = null;
     /* Status colours mapping */
     var sc = {Active: 'badge-green', Inactive: 'badge-muted', 'On Hold': 'badge-gold'};
 
-    g('sup-tbody').innerHTML = fi.length ? fi.map(function(i){
+    var sortedFi = [...fi];
+    sortedFi.sort(function(a, b) {
+      var valA, valB;
+      if (supSortCol === 'category') { valA = (a.category || '').toLowerCase(); valB = (b.category || '').toLowerCase(); }
+      else if (supSortCol === 'status') { valA = (a.status || '').toLowerCase(); valB = (b.status || '').toLowerCase(); }
+      else if (supSortCol === 'rating') { valA = Number(a.rating || 0); valB = Number(b.rating || 0); }
+      else if (supSortCol === 'website') { valA = (a.website || '').toLowerCase(); valB = (b.website || '').toLowerCase(); }
+      else if (supSortCol === 'contact') { valA = (a.contact || '').toLowerCase(); valB = (b.contact || '').toLowerCase(); }
+      else if (supSortCol === 'phone') { valA = (a.phone || '').toLowerCase(); valB = (b.phone || '').toLowerCase(); }
+      else { valA = (a.name || '').toLowerCase(); valB = (b.name || '').toLowerCase(); }
+
+      if (valA < valB) return supSortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return supSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    g('sup-tbody').innerHTML = sortedFi.length ? sortedFi.map(function(i){
       var websiteLink = i.website ? '<a href="https://' + esc(i.website) + '" target="_blank" style="color:var(--accent);text-decoration:none">&#127760; ' + esc(i.website) + '</a>' : '—';
       return '<tr class="sup-row" data-id="' + i.id + '" style="cursor:pointer" title="Click to view full details">' +
         '<td style="font-weight:700;color:var(--text)">' + esc(i.name) + '</td>' +
