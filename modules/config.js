@@ -97,17 +97,17 @@ window.PricingEngine = {
     const catalog = skuCatalog || window.__skuCatalogCache || [];
     const inv = inventoryCache || window.__inventoryCache || [];
     bomItems.forEach(item => {
+      const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
       const invItem = inv.find(x => x.sku === item.itemId || x.id === item.itemId);
-      let unitCost = 0;
-      if (invItem) {
-        const cost = Number(invItem.cost || 0);
-        const capacity = Number(invItem.metricCapacity || 1);
-        unitCost = cost / capacity;
-      } else {
-        const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
-        unitCost = spec ? Number(spec.cost || 0) : Number(item.unitCost || 0);
-      }
-      const qtyWithWaste = item.qty * (1 + (Number(item.waste) || 0) / 100);
+      let packCost = spec ? Number(spec.cost || 0) : 0;
+      if (!packCost && invItem) packCost = Number(invItem.cost || 0);
+      if (!packCost) packCost = Number(item.unitCost || 0);
+
+      let capacity = Number(item.metricCapacity || (invItem ? invItem.metricCapacity : 1) || 1);
+      if (capacity <= 0) capacity = 1;
+
+      let unitCost = packCost / capacity;
+      const qtyWithWaste = (Number(item.qty) || 0) * (1 + (Number(item.waste) || 0) / 100);
       total += unitCost * qtyWithWaste;
     });
     return total;
@@ -222,22 +222,202 @@ window.MAKER_CONFIG = {
   }
 };
 
-// Intercept makerAPI for generic modules to support dynamic Google Sheets backup
-(function() {
-  if (window.makerAPI) {
-    const originalMakerAPI = window.makerAPI;
-    const tabularFiles = [
-      'customers.json',
-      'inventory.json',
-      'suppliers.json',
-      'products.json',
-      'orders.json',
-      'sku.json',
-      'categories.json',
-      'brands.json'
-    ];
+// Global tabular database file register
+const tabularFiles = [
+  'customers.json',
+  'inventory.json',
+  'suppliers.json',
+  'products.json',
+  'orders.json',
+  'sku.json',
+  'categories.json',
+  'brands.json'
+];
 
-    function filenameToTabName(filename) {
+/**
+ * Rebuild and Seed Google Sheets Database Engine:
+ * Enforces correct column headers and uploads all local JSON datasets to Google Sheets.
+ */
+window.rebuildAndSeedGoogleSheets = async function(showNotice = true) {
+  if (!window.MAKER_CONFIG || !window.MAKER_CONFIG.scriptUrl || !window.makerAPI) return;
+
+  if (showNotice) {
+    const confirmRebuild = confirm("⚡ Rebuild Google Sheets Database?\n\nThis will synchronize all local datasets (Suppliers, Inventory, SKUs, Products, Customers, Orders, Categories, Brands) to your Google Spreadsheet and ensure standard headers are set.");
+    if (!confirmRebuild) return;
+  }
+
+  console.log('[Rebuild] Rebuilding and seeding Google Sheets database...');
+
+  const standardHeaders = {
+    'Suppliers': ['id', 'name', 'category', 'status', 'rating', 'website', 'contact', 'email', 'phone', 'lead', 'min', 'shipping', 'notes'],
+    'Customers': ['id', 'name', 'email', 'phone', 'address', 'finish_preference', 'instagram_handle', 'customer_type', 'notes', 'created_at'],
+    'Inventory': ['id', 'sku', 'name', 'brand', 'cat', 'subcat', 'type', 'colour', 'qty', 'lowStock', 'diameter', 'weight', 'printTemp', 'bedTemp', 'cost', 'location', 'supplier', 'notes', 'unitMetric', 'metricCapacity', 'photo'],
+    'Sku': ['id', 'sku', 'name', 'cat', 'subcat', 'brand', 'cost', 'price', 'cogs', 'retail', 'status', 'notes', 'classification', 'photo', 'supplier', 'variation', 'varCode', 'typeName', 'typeCode'],
+    'Products': ['id', 'name', 'category', 'sku', 'status', 'platforms', 'saleprice', 'etsyfee', 'description', 'notes', 'labourhrs', 'labourrate', 'labourcost', 'materialcost', 'cogs', 'margin', 'bom', 'photo'],
+    'Orders': ['id', 'ordernumber', 'date', 'source', 'status', 'paymentstatus', 'customerid', 'customername', 'notes', 'lineitems', 'subtotal', 'shipping', 'total', 'cogs', 'profit', 'externalid'],
+    'Categories': ['id', 'code', 'label', 'color', 'subs'],
+    'Brands': ['ID', 'Name', 'Code', 'Website', 'Status', 'Notes']
+  };
+
+  const seedConfigs = [
+    {
+      file: 'suppliers.json',
+      cacheKey: '__suppliersCache',
+      tab: 'Suppliers',
+      mapFn: item => [
+        item.id, item.name, item.category, item.status, item.rating, item.website, item.contact, item.email,
+        item.phone ? String(item.phone).replace(/^\+/, '') : '',
+        item.lead, item.minOrder || item.min || '', item.shipping, item.notes
+      ]
+    },
+    {
+      file: 'customers.json',
+      cacheKey: '__customerCache',
+      tab: 'Customers',
+      mapFn: item => [
+        item.id, item.name, item.email,
+        item.phone ? String(item.phone).replace(/^\+/, '') : '',
+        item.address,
+        item.finishPref || item.finish_preference || item.finishPreference || '',
+        item.igHandle || item.instagram_handle || item.instagram || '',
+        item.type || item.customer_type || 'Personal',
+        item.notes,
+        item.createdAt || item.created_at || new Date().toISOString().slice(0, 10)
+      ]
+    },
+    {
+      file: 'inventory.json',
+      cacheKey: '__inventoryCache',
+      tab: 'Inventory',
+      mapFn: item => [
+        item.id, item.sku, item.name, item.brand, item.category || item.cat || '', item.subcategory || item.subcat || '',
+        item.type, item.colour || item.color || '', item.qty, item.lowStock, item.diameter, item.weight,
+        item.printTemp, item.bedTemp, item.cost, item.location, item.supplier, item.notes,
+        item.unitMetric || 'ea', item.metricCapacity || 1, item.photo || ''
+      ]
+    },
+    {
+      file: 'sku.json',
+      cacheKey: '__skuCatalogCache',
+      tab: 'Sku',
+      mapFn: item => [
+        item.id, item.sku, item.name, item.cat, item.subcat, item.brand, item.cost, item.price,
+        item.cogs, item.retail, item.status, item.notes, item.classification, item.photo || '',
+        item.supplier || '', item.variation || '', item.varCode || '', item.typeName || '', item.typeCode || ''
+      ]
+    },
+    {
+      file: 'products.json',
+      cacheKey: '__productsCache',
+      tab: 'Products',
+      mapFn: item => [
+        item.id, item.name, item.category, item.sku, item.status,
+        item.platforms ? JSON.stringify(item.platforms) : '[]',
+        item.saleprice || item.salePrice || 0,
+        item.etsyfee || item.etsyFee || 0,
+        item.description || '', item.notes || '',
+        item.labourhrs || item.labourHrs || 0,
+        item.labourrate || item.labourRate || 20,
+        item.labourcost || item.labourCost || 0,
+        item.materialcost || item.materialCost || 0,
+        item.cogs || 0, item.margin || 0,
+        item.bom ? JSON.stringify(item.bom) : '[]',
+        item.photo || ''
+      ]
+    },
+    {
+      file: 'orders.json',
+      cacheKey: '__ordersCache',
+      tab: 'Orders',
+      mapFn: item => [
+        item.id, item.orderNumber || item.ordernumber || '', item.date || '', item.source || '',
+        item.status || '', item.paymentStatus || item.paymentstatus || '',
+        item.customerId || item.customerid || '', item.customerName || item.customername || '',
+        item.notes || '', item.lineItems ? JSON.stringify(item.lineItems) : '[]',
+        item.subtotal || 0, item.shipping || 0, item.total || 0, item.cogs || 0, item.profit || 0,
+        item.externalId || item.externalid || ''
+      ]
+    },
+    {
+      file: 'categories.json',
+      cacheKey: 'OSOT_CATS',
+      tab: 'Categories',
+      mapFn: item => [item.id, item.code, item.label, item.color, item.subs ? JSON.stringify(item.subs) : '{}']
+    },
+    {
+      file: 'brands.json',
+      cacheKey: '__brandsCache',
+      tab: 'Brands',
+      mapFn: item => [item.id, item.name, item.code, item.website, item.status, item.notes]
+    }
+  ];
+
+  let totalSynced = 0;
+
+  for (const cfg of seedConfigs) {
+    try {
+      let sourceData = [];
+      if (cfg.cacheKey && window[cfg.cacheKey]) {
+        sourceData = Array.isArray(window[cfg.cacheKey]) ? window[cfg.cacheKey] : (typeof window[cfg.cacheKey] === 'object' ? Object.values(window[cfg.cacheKey]) : []);
+      }
+      if (!sourceData || sourceData.length === 0) {
+        sourceData = await window.makerAPI.readData(cfg.file) || [];
+      }
+
+      if (sourceData && Array.isArray(sourceData) && sourceData.length > 0) {
+        for (const item of sourceData) {
+          const row = cfg.mapFn(item);
+          if (row && row[0]) {
+            await window.MAKER_CONFIG.saveToDatabase(cfg.tab, row);
+            totalSynced++;
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[Rebuild] Error seeding tab ${cfg.tab}:`, err);
+    }
+  }
+
+  if (showNotice) {
+    alert(`⚡ Rebuild complete!\n\nSuccessfully queued ${totalSynced} records across all database tabs for synchronization with Google Sheets.`);
+  }
+};
+
+/**
+ * Auto-seeding / Auto-sync engine:
+ * Reads local JSON caches and automatically syncs any local records missing from remote Google Sheets tabs.
+ */
+window.autoSyncAllDataToSheets = async function() {
+  if (!window.MAKER_CONFIG || !window.MAKER_CONFIG.scriptUrl || !window.makerAPI) return;
+
+  console.log('[AutoSync] Checking bidirectional synchronization between local JSON and Google Sheets...');
+
+  const syncTargets = [
+    { file: 'suppliers.json', tab: 'Suppliers', moduleInit: '__makerInit_suppliers' },
+    { file: 'customers.json', tab: 'Customers', moduleInit: '__makerInit_customers' },
+    { file: 'inventory.json', tab: 'Inventory', moduleInit: '__makerInit_inventory' },
+    { file: 'sku.json', tab: 'Sku', moduleInit: '__makerInit_sku' },
+    { file: 'products.json', tab: 'Products', moduleInit: '__makerInit_products' },
+    { file: 'orders.json', tab: 'Orders', moduleInit: '__makerInit_orders' },
+    { file: 'brands.json', tab: 'Brands', moduleInit: '__makerInit_brands' },
+    { file: 'categories.json', tab: 'Categories', moduleInit: '__makerInit_categories' }
+  ];
+
+  for (const target of syncTargets) {
+    try {
+      if (target.moduleInit && typeof window[target.moduleInit] === 'function') {
+        await window[target.moduleInit](false);
+      }
+    } catch (err) {
+      console.error(`[AutoSync] Error running ${target.moduleInit} for ${target.tab}:`, err);
+    }
+  }
+};
+
+// Intercept makerAPI for generic modules to support dynamic Google Sheets backup
+function initMakerApiInterceptor() {
+  if (!window.makerAPI) return;
+  const originalMakerAPI = window.makerAPI;
       if (filename === 'recipes.json') return 'Recipes';
       if (filename === 'checklists.json') return 'Checklists';
       if (filename === 'sku.json') return 'Sku';
@@ -273,7 +453,7 @@ window.MAKER_CONFIG = {
         'Suppliers': ['id', 'name', 'category', 'status', 'rating', 'website', 'contact', 'email', 'phone', 'lead', 'min', 'shipping', 'notes'],
         'Customers': ['id', 'name', 'email', 'phone', 'address', 'finish_preference', 'instagram_handle', 'customer_type', 'notes', 'created_at'],
         'Inventory': ['id', 'sku', 'name', 'brand', 'cat', 'subcat', 'type', 'colour', 'qty', 'lowStock', 'diameter', 'weight', 'printTemp', 'bedTemp', 'cost', 'location', 'supplier', 'notes', 'unitMetric', 'metricCapacity', 'photo'],
-        'Sku': ['id', 'sku', 'name', 'cat', 'subcat', 'brand', 'cost', 'price', 'cogs', 'retail', 'status', 'notes', 'classification', 'photo'],
+        'Sku': ['id', 'sku', 'name', 'cat', 'subcat', 'brand', 'cost', 'price', 'cogs', 'retail', 'status', 'notes', 'classification', 'photo', 'supplier', 'variation', 'varCode', 'typeName', 'typeCode'],
         'Products': ['id', 'name', 'category', 'sku', 'status', 'platforms', 'saleprice', 'etsyfee', 'description', 'notes', 'labourhrs', 'labourrate', 'labourcost', 'materialcost', 'cogs', 'margin', 'bom', 'photo'],
         'Orders': ['id', 'ordernumber', 'date', 'source', 'status', 'paymentstatus', 'customerid', 'customername', 'notes', 'lineitems', 'subtotal', 'shipping', 'total', 'cogs', 'profit', 'externalid'],
         'Categories': ['id', 'code', 'label', 'color', 'subs'],
@@ -323,7 +503,8 @@ window.MAKER_CONFIG = {
           tab: 'Sku',
           mapFn: item => [
             item.id, item.sku, item.name, item.cat, item.subcat, item.brand, item.cost, item.price,
-            item.cogs, item.retail, item.status, item.notes, item.classification, item.photo || ''
+            item.cogs, item.retail, item.status, item.notes, item.classification, item.photo || '',
+            item.supplier || '', item.variation || '', item.varCode || '', item.typeName || '', item.typeCode || ''
           ]
         },
         {
@@ -415,11 +596,12 @@ window.MAKER_CONFIG = {
       const syncTargets = [
         { file: 'suppliers.json', tab: 'Suppliers', moduleInit: '__makerInit_suppliers' },
         { file: 'customers.json', tab: 'Customers', moduleInit: '__makerInit_customers' },
-        { file: 'inventory.json', tab: 'Inventory', moduleInit: 'loadInventory' },
-        { file: 'sku.json', tab: 'Sku' },
-        { file: 'products.json', tab: 'Products' },
-        { file: 'orders.json', tab: 'Orders' },
-        { file: 'brands.json', tab: 'Brands' }
+        { file: 'inventory.json', tab: 'Inventory', moduleInit: '__makerInit_inventory' },
+        { file: 'sku.json', tab: 'Sku', moduleInit: '__makerInit_sku' },
+        { file: 'products.json', tab: 'Products', moduleInit: '__makerInit_products' },
+        { file: 'orders.json', tab: 'Orders', moduleInit: '__makerInit_orders' },
+        { file: 'brands.json', tab: 'Brands', moduleInit: '__makerInit_brands' },
+        { file: 'categories.json', tab: 'Categories', moduleInit: '__makerInit_categories' }
       ];
 
       for (const target of syncTargets) {
@@ -433,50 +615,75 @@ window.MAKER_CONFIG = {
       }
     };
 
-    window.makerAPI = Object.assign({}, originalMakerAPI, {
-      async readData(filename) {
-        if (tabularFiles.includes(filename)) {
-          return originalMakerAPI.readData(filename);
-        }
+// Intercept makerAPI for generic modules to support dynamic Google Sheets backup
+function initMakerApiInterceptor() {
+  if (!window.makerAPI) return;
+  const originalMakerAPI = window.makerAPI;
 
-        const tabName = filenameToTabName(filename);
-        try {
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
-            const remoteData = await window.MAKER_CONFIG.fetchFromDatabase(tabName);
-            if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
-              const dataRow = remoteData.find(row => row && row[0] === 'JSON_DATA');
-              if (dataRow && dataRow[1]) {
-                const parsed = JSON.parse(dataRow[1]);
-                await originalMakerAPI.writeData(filename, parsed);
-                return parsed;
-              }
+  function filenameToTabName(filename) {
+    if (filename === 'recipes.json') return 'Recipes';
+    if (filename === 'checklists.json') return 'Checklists';
+    if (filename === 'sku.json') return 'Sku';
+    if (filename === 'sublimation.json') return 'Sublimation';
+    if (filename === 'projects.json') return 'Projects';
+    if (filename === 'print3d.json') return 'Print3D';
+    if (filename === 'laser_mat.json') return 'Laser_Mat';
+    if (filename === 'laser_lb.json') return 'Laser_Lb';
+    if (filename === 'laser_log.json') return 'Laser_Log';
+    if (filename === 'assets_hw.json') return 'Assets_Hw';
+    if (filename === 'assets_sw.json') return 'Assets_Sw';
+    return filename.replace('.json', '').split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('_');
+  }
+
+  window.makerAPI = Object.assign({}, originalMakerAPI, {
+    async readData(filename) {
+      if (tabularFiles.includes(filename)) {
+        return originalMakerAPI.readData(filename);
+      }
+
+      const tabName = filenameToTabName(filename);
+      try {
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.fetchFromDatabase) {
+          const remoteData = await window.MAKER_CONFIG.fetchFromDatabase(tabName);
+          if (remoteData && Array.isArray(remoteData) && remoteData.length > 0) {
+            const dataRow = remoteData.find(row => row && row[0] === 'JSON_DATA');
+            if (dataRow && dataRow[1]) {
+              const parsed = JSON.parse(dataRow[1]);
+              await originalMakerAPI.writeData(filename, parsed);
+              return parsed;
             }
           }
-        } catch (err) {
-          console.error(`[Google Sheets] Intercept readData error for ${filename}:`, err);
         }
+      } catch (err) {
+        console.error(`[Google Sheets] Intercept readData error for ${filename}:`, err);
+      }
 
-        return originalMakerAPI.readData(filename);
-      },
+      return originalMakerAPI.readData(filename);
+    },
 
-      async writeData(filename, data) {
-        const result = await originalMakerAPI.writeData(filename, data);
-        if (tabularFiles.includes(filename)) {
-          return result;
-        }
-
-        const tabName = filenameToTabName(filename);
-        try {
-          if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-            const payload = ['JSON_DATA', JSON.stringify(data)];
-            await window.MAKER_CONFIG.saveToDatabase(tabName, payload);
-          }
-        } catch (err) {
-          console.error(`[Google Sheets] Intercept writeData error for ${filename}:`, err);
-        }
-
+    async writeData(filename, data) {
+      const result = await originalMakerAPI.writeData(filename, data);
+      if (tabularFiles.includes(filename)) {
         return result;
       }
-    });
-  }
-})();
+
+      const tabName = filenameToTabName(filename);
+      try {
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          const payload = ['JSON_DATA', JSON.stringify(data)];
+          await window.MAKER_CONFIG.saveToDatabase(tabName, payload);
+        }
+      } catch (err) {
+        console.error(`[Google Sheets] Intercept writeData error for ${filename}:`, err);
+      }
+
+      return result;
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMakerApiInterceptor);
+} else {
+  initMakerApiInterceptor();
+}

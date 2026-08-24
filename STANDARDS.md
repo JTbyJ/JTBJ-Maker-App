@@ -102,10 +102,19 @@ P	Location	location	''
 Q	Supplier	supplier	''
 R	Notes	notes	''
 
-*Note on Database Normalization & Dynamic Enrichment:*
-To prevent data redundancy and maintain a single source of truth (SSOT), the local file `inventory.json` is fully normalized. It does not store duplicate fields like `Name`, `Brand`, `Category`, or `Subcategory`.
-Instead, the `makerAPI.readData('inventory.json')` and `makerAPI.writeData('inventory.json')` operations are intercepted globally inside `modules/config.js`. When reading inventory data, these fields are dynamically resolved and enriched in-memory directly from the master SKU catalog (`sku.json`), guaranteeing referential integrity and instant propagation of catalog edits to inventory lot representations.
-Cost calculations, margin suggestions, and BOM-level estimation formulas dynamically query the master SKU's average cost metrics in real-time.
+*Note on Database Normalization, SKU Structure & Dynamic Enrichment:*
+To prevent data redundancy and maintain a single source of truth (SSOT), physical inventory entries in `inventory.json` reference master SKUs in `sku.json`.
+The application uses a standardized 5-part SKU structure: `[CAT]-[SUBCAT]-[TYPE]-[BRAND]-[COLOR]` (e.g. `FIL-PLA-SLK-OVR-FGRN`, `FIL-PLA-HYP-CRL-BLUE`).
+- **[CAT]:** Category group code (e.g. `FIL`, `MAT`, `BLK`, `SUB`, `PKG`, `CONS`).
+- **[SUBCAT]:** Subcategory code (e.g. `PLA`, `PTG`, `TPU`, `WOD`, `MUG`).
+- **[TYPE]:** 3-letter Type / Finish code (e.g. `REG` for Regular, `SLK` for Silk, `HYP` for Hyper/High-speed, `LUM` for Luminous).
+- **[BRAND]:** 3-letter Brand code generated from brand manager or manufacturer name.
+- **[COLOR]:** 4-letter Color / Variant code (e.g. `FGRN` for Forest Green, `BLAC` for Black, `BLUE` for Blue, `WHIT` for White).
+
+*Note on AVCO Moving Weighted Average Costing & Wastage:*
+When new inventory stock is added or replenished, the system applies the Moving Weighted Average Cost (AVCO) engine: `new_avg_cost = (current_qty * current_cost + added_qty * new_cost) / new_total_qty`.
+This updates the master SKU record in `sku.json` and syncs back to Google Sheets.
+All BOM calculations across Projects and Products dynamically evaluate unit cost per metric (e.g., `cost / metricCapacity` for grams, meters, sheets, or items) and factor in item-level estimated wastage percentage (`qty * (1 + waste % / 100)`).
 
 C. Suppliers Sheet Mapping
 Column	Sheet Header	JavaScript Property	Default / Fallback
