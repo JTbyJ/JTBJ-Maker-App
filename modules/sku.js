@@ -325,18 +325,18 @@
   /* ── LOAD SUPPLIERS ── */
   async function loadSuppliers(){
     var sups = [];
-    try { sups = await window.makerAPI.readData('suppliers.json') || []; } catch(e){}
+    try {
+      if (window.__suppliersCache) {
+        sups = window.__suppliersCache;
+      } else {
+        sups = await window.makerAPI.readData('suppliers.json') || [];
+      }
+    } catch(e){}
     var activeSups = sups.filter(s => s.status === 'Active');
     var html = '<option value="">Select Supplier...</option>';
     activeSups.forEach(s => {
       html += '<option value="' + escapeHtml(s.name) + '">' + escapeHtml(s.name) + '</option>';
     });
-    // Add defaults if empty
-    if(activeSups.length === 0){
-      ['CREALITY', 'Overture', 'GEEETECH', 'GIANTARM', 'Filaments.ca', 'Uline Canada', 'Michaels Canada', 'Home Depot / Rona'].forEach(name => {
-        html += '<option value="' + name + '">' + name + '</option>';
-      });
-    }
     var supplierSelect = $('sku-supplier-select');
     if (supplierSelect) {
       supplierSelect.innerHTML = html;
@@ -432,8 +432,10 @@
           const photoIdx = header.findIndex(h => h === 'photo' || h === 'image' || h.includes('photo') || h.includes('image'));
 
           const supplierIdx = header.findIndex(h => h === 'supplier' || h.includes('supplier'));
-          const varIdx = header.findIndex(h => h === 'variation' || h.includes('var'));
-          const varCodeIdx = header.findIndex(h => h === 'varcode' || h === 'variation_code' || h.includes('varcode'));
+          const varIdx = header.findIndex(h => h === 'variation' || h === 'colour' || h.includes('var'));
+          const varCodeIdx = header.findIndex(h => h === 'varcode' || h === 'colorcode' || h.includes('varcode'));
+          const typeNameIdx = header.findIndex(h => h === 'typename' || h === 'type_name');
+          const typeCodeIdx = header.findIndex(h => h === 'typecode' || h === 'type_code');
 
           const parsedSkus = [];
           for (let i = 1; i < remoteData.length; i++) {
@@ -460,6 +462,8 @@
               supplier: (supplierIdx !== -1 ? r[supplierIdx] : '') || '',
               variation: (varIdx !== -1 ? r[varIdx] : '') || '',
               varCode: (varCodeIdx !== -1 ? r[varCodeIdx] : '') || '',
+              typeName: (typeNameIdx !== -1 ? r[typeNameIdx] : '') || '',
+              typeCode: (typeCodeIdx !== -1 ? r[typeCodeIdx] : '') || '',
               cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
               price: priceIdx !== -1 ? (Number(r[priceIdx]) || 0) : 0,
               cogs: cogsIdx !== -1 ? (Number(r[cogsIdx]) || 0) : 0,
@@ -475,7 +479,8 @@
               window.MAKER_CONFIG.saveToDatabase('Sku', [
                 itemObj.id, itemObj.sku, itemObj.name, itemObj.cat, itemObj.subcat, itemObj.brand,
                 itemObj.cost, itemObj.price, itemObj.cogs, itemObj.retail, itemObj.status, itemObj.notes,
-                itemObj.classification, itemObj.photo, itemObj.supplier, itemObj.variation, itemObj.varCode
+                itemObj.classification, itemObj.photo, itemObj.supplier, itemObj.variation, itemObj.varCode,
+                itemObj.typeName, itemObj.typeCode
               ]);
             }
           }
@@ -494,7 +499,8 @@
                   window.MAKER_CONFIG.saveToDatabase('Sku', [
                     localItem.id, localItem.sku, localItem.name, localItem.cat, localItem.subcat, localItem.brand,
                     localItem.cost, localItem.price, localItem.cogs, localItem.retail, localItem.status, localItem.notes,
-                    localItem.classification, localItem.photo, localItem.supplier, localItem.variation, localItem.varCode
+                    localItem.classification, localItem.photo, localItem.supplier, localItem.variation, localItem.varCode,
+                    localItem.typeName || '', localItem.typeCode || ''
                   ]);
                 }
               }
@@ -709,7 +715,7 @@
         obj.id, obj.sku, obj.name, obj.cat, obj.subcat,
         obj.brand, obj.cost, obj.price, obj.cogs, obj.retail,
         obj.status, obj.notes, obj.classification, obj.photo,
-        obj.supplier, obj.variation, obj.varCode
+        obj.supplier, obj.variation, obj.varCode, obj.typeName, obj.typeCode
       ]);
     }
   });
