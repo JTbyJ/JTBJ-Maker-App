@@ -76,7 +76,7 @@ window.openGlobalSkuBuilder({
 
 ### Implementation Mechanics
 1. **Dynamic Dropdowns:** Dynamically binds Categories/Subcategories from `window.OSOT_CATS`.
-2. **Auto-Generated Abbreviations:** Instantly generates the brand code and next sequence number using standard Option A formatting: `[CAT]-[SUBCAT]-[BRAND_CODE]-[VAR_CODE / SEQ]`.
+2. **Standardized 5-Part SKU Code Formatting:** Auto-generates SKUs using the 5-part structure: `[CAT]-[SUBCAT]-[TYPE]-[BRAND]-[COLOR]` (e.g. `FIL-PLA-SLK-OVR-FGRN`, `FIL-PLA-HYP-CRL-BLUE`).
 3. **Event Pipeline:** Broadcasts a custom event (`'skuCatalogUpdated'`) across panels to refresh all active dropdown selects inline.
 
 ---

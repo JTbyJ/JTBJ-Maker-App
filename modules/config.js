@@ -97,17 +97,17 @@ window.PricingEngine = {
     const catalog = skuCatalog || window.__skuCatalogCache || [];
     const inv = inventoryCache || window.__inventoryCache || [];
     bomItems.forEach(item => {
+      const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
       const invItem = inv.find(x => x.sku === item.itemId || x.id === item.itemId);
-      let unitCost = 0;
-      if (invItem) {
-        const cost = Number(invItem.cost || 0);
-        const capacity = Number(invItem.metricCapacity || 1);
-        unitCost = cost / capacity;
-      } else {
-        const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
-        unitCost = spec ? Number(spec.cost || 0) : Number(item.unitCost || 0);
-      }
-      const qtyWithWaste = item.qty * (1 + (Number(item.waste) || 0) / 100);
+      let packCost = spec ? Number(spec.cost || 0) : 0;
+      if (!packCost && invItem) packCost = Number(invItem.cost || 0);
+      if (!packCost) packCost = Number(item.unitCost || 0);
+
+      let capacity = Number(item.metricCapacity || (invItem ? invItem.metricCapacity : 1) || 1);
+      if (capacity <= 0) capacity = 1;
+
+      let unitCost = packCost / capacity;
+      const qtyWithWaste = (Number(item.qty) || 0) * (1 + (Number(item.waste) || 0) / 100);
       total += unitCost * qtyWithWaste;
     });
     return total;
