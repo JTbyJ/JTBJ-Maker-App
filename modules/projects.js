@@ -52,10 +52,11 @@
             '<select id="proj-bom-item"><option value="">Select supply...</option></select>'+
           '</div>'+
           '<div class="field" style="width:70px"><label>Qty</label><input id="proj-bom-qty" type="number" value="1" step="any"></div>'+
+          '<div class="field" style="width:70px"><label>Waste %</label><input id="proj-bom-waste" type="number" value="0" step="any"></div>'+
           '<button type="button" class="btn btn-secondary" id="proj-bom-add-btn">Add</button>'+
         '</div>'+
         '<div class="table-wrap" style="flex:1;min-height:120px;margin-bottom:12px">'+
-          '<table><thead><tr><th>Supply</th><th>Qty</th><th>Cost</th><th>Total</th><th></th></tr></thead>'+
+          '<table><thead><tr><th>Supply</th><th>Qty</th><th>Waste %</th><th>Unit Cost</th><th>Total</th><th></th></tr></thead>'+
           '<tbody id="proj-bom-tbody"></tbody></table>'+
         '</div>'+
       '</div>'+
@@ -414,6 +415,7 @@
   g('proj-bom-add-btn').addEventListener('click', function() {
     var itemId = g('proj-bom-item').value;
     var qty = parseFloat(g('proj-bom-qty').value) || 0;
+    var waste = parseFloat(g('proj-bom-waste').value) || 0;
     if (!itemId || qty <= 0) return;
 
     var inv = inventory.find(function(x) { return x.sku === itemId || x.id === itemId; });
@@ -426,16 +428,20 @@
       var existing = activeBom.find(function(b) { return b.itemId === bomIdentifier; });
       if (existing) {
         existing.qty += qty;
+        existing.waste = waste;
       } else {
         activeBom.push({
           itemId: bomIdentifier,
           name: inv.name,
           qty: qty,
+          waste: waste,
           unitMetric: inv.unitMetric || 'ea',
+          metricCapacity: inv.metricCapacity || 1,
           unitCost: calculatedUnitCost
         });
       }
       g('proj-bom-qty').value = '1';
+      g('proj-bom-waste').value = '0';
       renderActiveBOM();
     }
   });
@@ -448,21 +454,25 @@
     var totalMatCost = window.PricingEngine.getLiveCost(activeBom, window.__skuCatalogCache, inventory);
 
     activeBom.forEach(function(b, idx) {
-      let uCost = Number(b.unitCost || 0);
-      if (uCost === 0) {
-        const skuCatalog = window.__skuCatalogCache || [];
-        const masterSku = skuCatalog.find(s => s.sku === b.itemId);
-        if (masterSku) {
-          uCost = Number(masterSku.cost || 0);
-        }
-      }
+      const spec = (window.__skuCatalogCache || []).find(s => s.sku === b.itemId);
+      const invItem = inventory.find(x => x.sku === b.itemId || x.id === b.itemId);
 
-      var lineTotal = b.qty * uCost;
+      let packCost = spec ? Number(spec.cost || 0) : 0;
+      if (!packCost && invItem) packCost = Number(invItem.cost || 0);
+      if (!packCost) packCost = Number(b.unitCost || 0);
+
+      let capacity = Number(b.metricCapacity || (invItem ? invItem.metricCapacity : 1) || 1);
+      if (capacity <= 0) capacity = 1;
+      let uCost = packCost / capacity;
+
+      var qtyWithWaste = b.qty * (1 + (Number(b.waste) || 0) / 100);
+      var lineTotal = qtyWithWaste * uCost;
 
       var tr = document.createElement('tr');
       tr.innerHTML = '<td>' + esc(b.name) + '</td>'+
         '<td>' + b.qty + ' ' + esc(b.unitMetric || 'ea') + '</td>'+
-        '<td>$' + uCost.toFixed(2) + '</td>'+
+        '<td>' + (Number(b.waste) || 0) + '%</td>'+
+        '<td>$' + uCost.toFixed(3) + '</td>'+
         '<td>$' + lineTotal.toFixed(2) + '</td>'+
         '<td><button type="button" class="btn btn-danger btn-sm p-bomr" style="padding:2px 6px;" data-idx="' + idx + '">×</button></td>';
       tbody.appendChild(tr);
@@ -589,7 +599,9 @@
         itemId: b.itemId,
         name: b.name,
         qty: b.qty,
+        waste: Number(b.waste) || 0,
         unitMetric: b.unitMetric || 'ea',
+        metricCapacity: b.metricCapacity || 1,
         unitCost: b.unitCost || 0
       }))
     };

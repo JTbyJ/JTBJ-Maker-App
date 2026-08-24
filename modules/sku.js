@@ -25,10 +25,10 @@
     OSOT_CATS = window.OSOT_CATS || OSOT_CATS;
   }
 
-  /* ── GET BRAND CODE HELPER ── */
-  function getBrandCode(brand) {
-    if (!brand) return 'UNK';
-    var clean = brand.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+  /* ── HELPER: 3-LETTER CODE FROM STRING (Brand, Type/Finish) ── */
+  function get3LetterCode(str) {
+    if (!str) return 'UNK';
+    var clean = str.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
     var words = clean.split(' ').filter(Boolean);
     if (words.length >= 3) {
       return (words[0][0] + words[1][0] + words[2][0]).slice(0, 3);
@@ -38,18 +38,47 @@
       return words[0].slice(0, 3).padEnd(3, 'X');
     }
   }
+  var getBrandCode = get3LetterCode;
 
-  /* ── AUTO-SEQUENCE: find next number for a given CAT-SUBCAT-BRAND ── */
-  function nextSeq(items,catCode,subCode,brandCode){
-    var prefix=catCode+'-'+subCode+'-'+(brandCode || 'UNK')+'-';
-    var max=0;
-    items.forEach(function(i){
-      if(i.sku&&i.sku.indexOf(prefix)===0){
-        var n=parseInt(i.sku.slice(prefix.length))||0;
-        if(n>max)max=n;
-      }
-    });
-    return String(max+1).padStart(3,'0');
+  function getTypeCode(typeStr) {
+    if (!typeStr) return 'REG';
+    var clean = typeStr.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+    if (!clean) return 'REG';
+    var commonMap = {
+      'REGULAR': 'REG', 'STANDARD': 'REG', 'SILK': 'SLK', 'HYPER': 'HYP',
+      'HIGH SPEED': 'HYP', 'LUMINOUS': 'LUM', 'WOOD': 'WOD', 'MATTE': 'MAT',
+      'GLOSSY': 'GLS', 'CARBON': 'CFR', 'PETG': 'PTG', 'PLA': 'PLA'
+    };
+    if (commonMap[clean]) return commonMap[clean];
+    return get3LetterCode(typeStr);
+  }
+
+  /* ── HELPER: 4-LETTER COLOR CODE ── */
+  function getColorCode(color) {
+    if (!color) return 'GENR';
+    var clean = color.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+    if (!clean) return 'GENR';
+
+    var commonMap = {
+      'BLACK': 'BLAC', 'BLUE': 'BLUE', 'RED': 'REDD', 'WHITE': 'WHIT',
+      'GREEN': 'GREN', 'PURPLE': 'PURP', 'YELLOW': 'YELW', 'ORANGE': 'ORNG',
+      'SILVER': 'SLVR', 'GOLD': 'GOLD', 'CLEAR': 'CLER', 'NATURAL': 'NATR',
+      'BROWN': 'BRWN', 'PINK': 'PINK', 'GRAY': 'GRAY', 'GREY': 'GREY'
+    };
+    if (commonMap[clean]) return commonMap[clean];
+
+    var words = clean.split(' ').filter(Boolean);
+    if (words.length === 1) {
+      var w = words[0];
+      if (w.length >= 4) return w.slice(0, 4);
+      return w.padEnd(4, w.slice(-1) || 'X');
+    } else {
+      var w1 = words[0][0];
+      var restStr = words.slice(1).join('');
+      var consonants = restStr.replace(/[AEIOU]/g, '');
+      var fill = consonants.length >= 3 ? consonants : restStr;
+      return (w1 + fill).slice(0, 4).padEnd(4, 'X');
+    }
   }
 
   /* ── BUILD CATEGORY OPTIONS ── */
@@ -123,8 +152,8 @@
       /* SKU PREVIEW */
       '<div style="background:var(--bg);border:2px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:16px;text-align:center">'+
         '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">SKU Preview</div>'+
-        '<div id="sku-preview" style="font-size:28px;font-weight:900;font-family:monospace;color:var(--accent);letter-spacing:2px">FIL-PLA-001</div>'+
-        '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Format: CATEGORY-SUBCATEGORY-SEQUENCE / VARIATION</div>'+
+        '<div id="sku-preview" style="font-size:28px;font-weight:900;font-family:monospace;color:var(--accent);letter-spacing:2px">FIL-PLA-REG-OVR-BLAC</div>'+
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Format: [CAT]-[SUBCAT]-[TYPE]-[BRAND]-[COLOR] (e.g. FIL-PLA-SLK-OVR-FGRN)</div>'+
       '</div>'+
 
       /* CATEGORY + SUBCATEGORY SELECTS */
@@ -141,17 +170,21 @@
             buildSubcatOptions('FIL','PLA')+
           '</select>'+
         '</div>'+
-        '<div class="field" style="flex:1.5">'+
-          '<label>Variation (e.g. Colour)</label>'+
-          '<input id="sku-var-name" placeholder="e.g. Black" style="font-weight:700">'+
+        '<div class="field" style="flex:1.2">'+
+          '<label>Type / Finish (e.g. Silk, Hyper)</label>'+
+          '<input id="sku-type-name" placeholder="e.g. Silk" style="font-weight:700">'+
         '</div>'+
-        '<div class="field" style="width:100px">'+
-          '<label>Var Code</label>'+
-          '<input id="sku-var-code" placeholder="BLK" style="font-family:monospace;font-weight:700">'+
+        '<div class="field" style="width:90px">'+
+          '<label>Type Code</label>'+
+          '<input id="sku-type-code" placeholder="SLK" style="font-family:monospace;font-weight:700">'+
         '</div>'+
-        '<div class="field" style="width:100px" id="sku-seq-field-container">'+
-          '<label>SEQUENCE #</label>'+
-          '<input id="sku-seq" value="001" placeholder="001" style="font-family:monospace;font-weight:700">'+
+        '<div class="field" style="flex:1.2">'+
+          '<label>Colour / Variant</label>'+
+          '<input id="sku-var-name" placeholder="e.g. Forest Green" style="font-weight:700">'+
+        '</div>'+
+        '<div class="field" style="width:90px">'+
+          '<label>Color Code</label>'+
+          '<input id="sku-var-code" placeholder="FGRN" style="font-family:monospace;font-weight:700">'+
         '</div>'+
         '<div class="field" style="flex:1.5">'+
           '<label>Custom Override SKU</label>'+
@@ -232,26 +265,25 @@
     if(custom){$('sku-preview').textContent=custom.toUpperCase();return;}
     var cat=$('sku-catgroup').value||'FIL';
     var sub=$('sku-subcat').value||'PLA';
+    var typeCode=($('sku-type-code').value || '').trim().toUpperCase() || 'REG';
     var brandSelect=$('sku-brand-select');
     var brandName=brandSelect ? brandSelect.value : '';
-    // Check if brand exists in cache to retrieve explicit 3-letter code
     var brandObj = (window.__brandsCache || []).find(b => b.name === brandName);
     var brandCode = brandObj && brandObj.code ? brandObj.code : getBrandCode(brandName);
-    var varCode=($('sku-var-code').value || '').trim().toUpperCase();
+    var colorCode=($('sku-var-code').value || '').trim().toUpperCase() || 'GENR';
 
-    if (varCode) {
-      if ($('sku-seq-field-container')) $('sku-seq-field-container').style.opacity = '0.4';
-      $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+varCode;
-    } else {
-      if ($('sku-seq-field-container')) $('sku-seq-field-container').style.opacity = '1';
-      var seq=$('sku-seq').value.trim()||nextSeq(items,cat,sub,brandCode);
-      $('sku-preview').textContent=cat+'-'+sub+'-'+brandCode+'-'+String(parseInt(seq)||1).padStart(3,'0');
-    }
+    $('sku-preview').textContent=cat+'-'+sub+'-'+typeCode+'-'+brandCode+'-'+colorCode;
+  }
+
+  function onTypeNameInput() {
+    var typeName = $('sku-type-name').value;
+    $('sku-type-code').value = getTypeCode(typeName);
+    buildPreview();
   }
 
   function onVarNameInput() {
     var varName = $('sku-var-name').value;
-    $('sku-var-code').value = getBrandCode(varName);
+    $('sku-var-code').value = getColorCode(varName);
     buildPreview();
   }
 
@@ -274,13 +306,16 @@
   }
 
   /* ── EVENT LISTENERS ON FORM FIELDS ── */
-  ['sku-catgroup','sku-subcat','sku-seq','sku-custom','sku-brand-select','sku-var-code'].forEach(function(id){
+  ['sku-catgroup','sku-subcat','sku-type-code','sku-var-code','sku-custom','sku-brand-select'].forEach(function(id){
     var el=$(id);
     if(el){
       el.addEventListener('input',buildPreview);
       el.addEventListener('change',id==='sku-catgroup'?onCatGroupChange:buildPreview);
     }
   });
+  if ($('sku-type-name')) {
+    $('sku-type-name').addEventListener('input', onTypeNameInput);
+  }
   if ($('sku-var-name')) {
     $('sku-var-name').addEventListener('input', onVarNameInput);
   }
@@ -596,7 +631,8 @@
         $('sku-custom').value=i.sku||'';
         $('sku-catgroup').value=i.cat || Object.keys(OSOT_CATS)[0];
         $('sku-subcat').innerHTML=buildSubcatOptions(i.cat || Object.keys(OSOT_CATS)[0], i.subcat || '');
-        $('sku-seq').value='';
+        $('sku-type-name').value=i.typeName || '';
+        $('sku-type-code').value=i.typeCode || '';
         $('sku-var-name').value=i.variation || '';
         $('sku-var-code').value=i.varCode || '';
         $('sku-pname').value=i.name||'';
@@ -645,6 +681,8 @@
       name:name,
       cat:catCode,
       subcat:subCode,
+      typeName:($('sku-type-name').value||'').trim(),
+      typeCode:($('sku-type-code').value||'').trim().toUpperCase(),
       brand:$('sku-brand-select').value,
       supplier:$('sku-supplier-select').value,
       variation:$('sku-var-name').value.trim(),
@@ -685,6 +723,8 @@
     if (window.populateBrandsDropdown) window.populateBrandsDropdown('sku-brand-select', '');
     $('sku-brand-select').value='';
     $('sku-supplier-select').value='';
+    $('sku-type-name').value='';
+    $('sku-type-code').value='';
     $('sku-var-name').value='';
     $('sku-var-code').value='';
     $('sku-classification').value='Raw Component / Material (BOM Input)';
