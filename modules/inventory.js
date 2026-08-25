@@ -877,7 +877,7 @@ async function saveInventoryItemForm(e) {
       // Save row to Sheets tab
       if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
         await window.MAKER_CONFIG.saveToDatabase('Sku', [
-          skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Inventory Form', 'Raw Component / Material (BOM Input)'
+          skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Inventory Form', 'Raw Component / Material (BOM Input)', '', '', '', '', '', ''
         ]);
       }
     }
@@ -951,7 +951,8 @@ async function saveInventoryItemForm(e) {
           await window.MAKER_CONFIG.saveToDatabase('Sku', [
             skuItem.id, skuItem.sku, skuItem.name, skuItem.cat || '', skuItem.subcat || '',
             skuItem.brand || '', skuItem.cost, skuItem.price || 0, skuItem.cogs || 0, skuItem.retail || 0,
-            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || ''
+            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || '',
+            skuItem.supplier || '', skuItem.variation || '', skuItem.varCode || '', skuItem.typeName || '', skuItem.typeCode || ''
           ]);
         }
       }

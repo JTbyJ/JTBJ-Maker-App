@@ -745,9 +745,6 @@
     var defaultSub = Object.keys((OSOT_CATS[defaultCat] || {subs:{}}).subs)[0] || '';
     $('sku-catgroup').value = defaultCat;
     $('sku-subcat').innerHTML=buildSubcatOptions(defaultCat, defaultSub);
-    /* Auto-suggest next sequence */
-    var nextNum=nextSeq(items, defaultCat, defaultSub);
-    $('sku-seq').value=nextNum;
     buildPreview();
     calcMargin();
   }
