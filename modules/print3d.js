@@ -29,7 +29,7 @@
         '<div class="field" style="flex:1"><label>Slicer</label><input id="p3-slicer" value="Creality Print" placeholder="Creality Print"></div>'+
       '</div>'+
       '<div class="input-row">'+
-        '<div class="field"><label>Filament Brand</label><select id="p3-brand"><option value="">-- Select --</option><option>CREALITY</option><option>GEEETECH</option><option>GIANTARM</option><option>Overture</option><option>Other</option></select></div>'+
+        '<div class="field"><label>Filament Brand</label><select id="p3-brand"><option value="">-- Select --</option></select></div>'+
         '<div class="field"><label>Material</label><select id="p3-material"><option>CR-PLA</option><option>CR-PLA WOOD</option><option>Hyper PLA</option><option>Luminous PLA</option><option>PLA-CF</option><option>PLA Silk</option><option>PETG</option><option>High Speed TPU</option><option>ABS</option><option>ASA</option><option>Resin</option><option>Other</option></select></div>'+
         '<div class="field"><label>Colour</label><input id="p3-colour" placeholder="e.g. Blue"></div>'+
         '<div class="field"><label>Nozzle C</label><input id="p3-nozzle" type="number" placeholder="220"></div>'+
@@ -265,6 +265,7 @@
   }
 
   async function load(){
+    if (window.populateBrandsDropdown) window.populateBrandsDropdown('p3-brand');
     items=await window.makerAPI.readData(FILE)||[];
     await loadFilamentParameters();
     render();
