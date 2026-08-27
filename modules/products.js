@@ -936,7 +936,7 @@ window.__productsCache = null;
       var photoCell = '';
       if (p.photo) {
         var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(p.photo) : p.photo;
-        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(p.photo)}'))" onerror="this.onerror=null; this.outerHTML='<span style=\x22font-size:18px; color:var(--muted);\x22 title=\x22Image restricted or unavailable\x22>📷</span>';">`;
+        photoCell = `<img src="${directPhotoUrl}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(p.photo)}'))" onerror="this.onerror=null; this.outerHTML='<span style=&quot;font-size:18px; color:var(--muted);&quot; title=&quot;Image restricted or unavailable&quot;>📷</span>';">`;
       } else {
         photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
       }

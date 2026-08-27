@@ -582,7 +582,7 @@ function renderInventoryTable(items) {
     var photoCell = '';
     if (imageLink) {
       var directPhotoUrl = window.getDirectPhotoUrl ? window.getDirectPhotoUrl(imageLink) : imageLink;
-      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))" onerror="this.onerror=null; this.outerHTML='<span style=\x22font-size:18px; color:var(--muted);\x22 title=\x22Image restricted or unavailable\x22>📷</span>';">`;
+      photoCell = `<img src="${escapeHtml(directPhotoUrl)}" style="width:36px; height:36px; border-radius:6px; object-fit:cover; cursor:pointer;" onclick="window.openPhotoLightbox(decodeURIComponent('${encodeURIComponent(imageLink)}'))" onerror="this.onerror=null; this.outerHTML='<span style=&quot;font-size:18px; color:var(--muted);&quot; title=&quot;Image restricted or unavailable&quot;>📷</span>';">`;
     } else {
       photoCell = '<span style="font-size:18px; color:var(--muted);">📷</span>';
     }
@@ -877,7 +877,7 @@ async function saveInventoryItemForm(e) {
       // Save row to Sheets tab
       if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
         await window.MAKER_CONFIG.saveToDatabase('Sku', [
-          skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Inventory Form', 'Raw Component / Material (BOM Input)'
+          skuId, sku, name, cat, subcat, brand, cost, 0, 0, 0, 'Active', 'Created inline from Inventory Form', 'Raw Component / Material (BOM Input)', '', '', '', '', '', ''
         ]);
       }
     }
@@ -951,7 +951,8 @@ async function saveInventoryItemForm(e) {
           await window.MAKER_CONFIG.saveToDatabase('Sku', [
             skuItem.id, skuItem.sku, skuItem.name, skuItem.cat || '', skuItem.subcat || '',
             skuItem.brand || '', skuItem.cost, skuItem.price || 0, skuItem.cogs || 0, skuItem.retail || 0,
-            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || ''
+            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || '',
+            skuItem.supplier || '', skuItem.variation || '', skuItem.varCode || '', skuItem.typeName || '', skuItem.typeCode || ''
           ]);
         }
       }
