@@ -163,9 +163,9 @@
         }
       };
 
-      function getGBrandCode(brand) {
-        if (!brand) return 'UNK';
-        var clean = brand.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+      function getG3LetterCode(str) {
+        if (!str) return 'UNK';
+        var clean = str.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
         var words = clean.split(' ').filter(Boolean);
         if (words.length >= 3) {
           return (words[0][0] + words[1][0] + words[2][0]).slice(0, 3);
@@ -175,19 +175,46 @@
           return words[0].slice(0, 3).padEnd(3, 'X');
         }
       }
+      var getGBrandCode = getG3LetterCode;
 
-      async function getGNextSeq(catCode, subCode, brandCode) {
-        let skus = [];
-        try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
-        var prefix = catCode + '-' + subCode + '-' + (brandCode || 'UNK') + '-';
-        var max = 0;
-        skus.forEach(function(i) {
-          if (i.sku && i.sku.indexOf(prefix) === 0) {
-            var num = parseInt(i.sku.replace(prefix, ''));
-            if (num > max) max = num;
-          }
-        });
-        return String(max + 1).padStart(3, '0');
+      function getGTypeCode(typeStr) {
+        if (!typeStr) return 'REG';
+        var clean = typeStr.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+        if (!clean) return 'REG';
+        var commonMap = {
+          'REGULAR': 'REG', 'STANDARD': 'REG', 'SILK': 'SLK', 'HYPER': 'HYP',
+          'HIGH SPEED': 'HYP', 'LUMINOUS': 'LUM', 'WOOD': 'WOD', 'MATTE': 'MAT',
+          'GLOSSY': 'GLS', 'CARBON': 'CFR', 'PETG': 'PTG', 'PLA': 'PLA'
+        };
+        if (commonMap[clean]) return commonMap[clean];
+        return getG3LetterCode(typeStr);
+      }
+
+      function getGColorCode(color) {
+        if (!color) return 'GENR';
+        var clean = color.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+        if (!clean) return 'GENR';
+
+        var commonMap = {
+          'BLACK': 'BLAC', 'BLUE': 'BLUE', 'RED': 'REDD', 'WHITE': 'WHIT',
+          'GREEN': 'GREN', 'PURPLE': 'PURP', 'YELLOW': 'YELW', 'ORANGE': 'ORNG',
+          'SILVER': 'SLVR', 'GOLD': 'GOLD', 'CLEAR': 'CLER', 'NATURAL': 'NATR',
+          'BROWN': 'BRWN', 'PINK': 'PINK', 'GRAY': 'GRAY', 'GREY': 'GREY'
+        };
+        if (commonMap[clean]) return commonMap[clean];
+
+        var words = clean.split(' ').filter(Boolean);
+        if (words.length === 1) {
+          var w = words[0];
+          if (w.length >= 4) return w.slice(0, 4);
+          return w.padEnd(4, w.slice(-1) || 'X');
+        } else {
+          var w1 = words[0][0];
+          var restStr = words.slice(1).join('');
+          var consonants = restStr.replace(/[AEIOU]/g, '');
+          var fill = consonants.length >= 3 ? consonants : restStr;
+          return (w1 + fill).slice(0, 4).padEnd(4, 'X');
+        }
       }
 
       window.activeGlobalSkuCallback = null;
@@ -209,6 +236,8 @@
 
         window.onGlobalSkuCatChange();
 
+        if (document.getElementById('g-sku-type')) document.getElementById('g-sku-type').value = '';
+        if (document.getElementById('g-sku-color')) document.getElementById('g-sku-color').value = '';
         document.getElementById('g-sku-brand').value = '';
         document.getElementById('g-sku-pname').value = '';
         document.getElementById('g-sku-cost').value = '0.00';
@@ -245,22 +274,32 @@
         const subcatEl = document.getElementById('g-sku-subcat');
         const catVal = catEl ? (catEl.value || 'FIL') : 'FIL';
         const subcatVal = subcatEl ? (subcatEl.value || 'PLA') : 'PLA';
+        const typeVal = document.getElementById('g-sku-type')?.value || '';
+        const colorVal = document.getElementById('g-sku-color')?.value || '';
         const brandVal = document.getElementById('g-sku-brand').value;
+
+        const typeCode = getGTypeCode(typeVal);
         const brandCode = getGBrandCode(brandVal);
-        const seq = await getGNextSeq(catVal, subcatVal, brandCode);
+        const colorCode = getGColorCode(colorVal);
+
         const previewEl = document.getElementById('g-sku-preview');
         if (previewEl) {
-          previewEl.textContent = catVal + '-' + subcatVal + '-' + brandCode + '-' + seq;
+          previewEl.textContent = catVal + '-' + subcatVal + '-' + typeCode + '-' + brandCode + '-' + colorCode;
         }
       };
 
       window.saveGlobalSkuBuilder = async function() {
         const catVal = document.getElementById('g-sku-cat').value || 'FIL';
         const subcatVal = document.getElementById('g-sku-subcat').value || 'PLA';
+        const typeVal = (document.getElementById('g-sku-type')?.value || '').trim();
+        const colorVal = (document.getElementById('g-sku-color')?.value || '').trim();
         const brandVal = document.getElementById('g-sku-brand').value.trim();
+
+        const typeCode = getGTypeCode(typeVal);
         const brandCode = getGBrandCode(brandVal);
-        const seq = await getGNextSeq(catVal, subcatVal, brandCode);
-        const finalSku = catVal + '-' + subcatVal + '-' + brandCode + '-' + seq;
+        const colorCode = getGColorCode(colorVal);
+
+        const finalSku = catVal + '-' + subcatVal + '-' + typeCode + '-' + brandCode + '-' + colorCode;
         const pname = document.getElementById('g-sku-pname').value.trim();
         const classification = document.getElementById('g-sku-class').value;
         const cost = Number(document.getElementById('g-sku-cost').value) || 0;
@@ -281,7 +320,11 @@
           name: pname,
           cat: catVal,
           subcat: subcatVal,
+          typeName: typeVal,
+          typeCode: typeCode,
           brand: brandVal,
+          variation: colorVal,
+          varCode: colorCode,
           cost: cost,
           price: 0,
           cogs: 0,
@@ -296,7 +339,7 @@
 
         if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
           await window.MAKER_CONFIG.saveToDatabase('Sku', [
-            skuId, finalSku, pname, catVal, subcatVal, brandVal, cost, 0, 0, retail, 'Active', 'Created on-the-fly globally', classification
+            skuId, finalSku, pname, catVal, subcatVal, brandVal, cost, 0, 0, retail, 'Active', 'Created on-the-fly globally', classification, '', '', colorVal, colorCode, typeVal, typeCode
           ]);
         }
 
@@ -318,7 +361,7 @@
 
         <div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px; text-align:center; margin-bottom:16px;">
           <div style="font-size:10px; color:#64748b; font-weight:700;">LIVE PREVIEW</div>
-          <div id="g-sku-preview" style="font-family:monospace; font-size:20px; font-weight:900; color:var(--accent, #3b82f6); margin-top:4px; letter-spacing:1px;">FIL-PLA-UNK-001</div>
+          <div id="g-sku-preview" style="font-family:monospace; font-size:20px; font-weight:900; color:var(--accent, #3b82f6); margin-top:4px; letter-spacing:1px;">FIL-PLA-REG-OVR-BLAC</div>
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
@@ -329,6 +372,17 @@
           <div>
             <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">SUB-CATEGORY</label>
             <select id="g-sku-subcat" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px; font-weight:700;" onchange="window.updateGlobalSkuPreview()"></select>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">TYPE / FINISH</label>
+            <input type="text" id="g-sku-type" placeholder="e.g. Silk, Hyper" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;" oninput="window.updateGlobalSkuPreview()">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">COLOUR / VARIANT</label>
+            <input type="text" id="g-sku-color" placeholder="e.g. Forest Green" style="width:100%; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:8px; border-radius:6px;" oninput="window.updateGlobalSkuPreview()">
           </div>
         </div>
 

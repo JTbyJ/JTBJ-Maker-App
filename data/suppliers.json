@@ -178,5 +178,20 @@
     "shipping": "Delivery available",
     "rating": 3,
     "notes": "Local source for wood boards, MDF, plywood, acrylic panels. Cut to size service available at some locations. Good for Sculpfun C30 Ultra materials."
+  },
+  {
+    "id": "mt7dnkqsgu00",
+    "name": "Cricut",
+    "category": "Craft Supplies",
+    "status": "Active",
+    "rating": 4,
+    "website": "https://cricut.com/en-ca",
+    "contact": "",
+    "email": "",
+    "phone": "",
+    "lead": "5 days",
+    "minOrder": "No minimum",
+    "shipping": "",
+    "notes": ""
   }
 ]
