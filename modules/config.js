@@ -206,10 +206,14 @@ window.PricingEngine = {
         await window.makerAPI.writeData(this.FILE, transactions);
         if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
           const tx = transactions[transactions.length - 1];
-          window.MAKER_CONFIG.saveToDatabase('InventoryTransactions', [
-            tx.id, tx.type, tx.sku, tx.date, tx.qty, tx.unitMetric, tx.metricCapacity,
-            tx.baseQty, tx.unitCost, tx.supplier, tx.location, JSON.stringify(tx.metadata || {})
-          ]);
+          try {
+            await window.MAKER_CONFIG.saveToDatabase('InventoryTransactions', [
+              tx.id, tx.type, tx.sku, tx.date, tx.qty, tx.unitMetric, tx.metricCapacity,
+              tx.baseQty, tx.unitCost, tx.supplier, tx.location, JSON.stringify(tx.metadata || {})
+            ]);
+          } catch (err) {
+            console.error('Inventory transaction sync failed:', err);
+          }
         }
         return this.rebuild(transactions);
       },

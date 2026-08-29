@@ -938,12 +938,6 @@ async function saveInventoryItemForm(e) {
       supplier: supplier, location: location, metadata: itemObj
     });
   }
-  const projection = window.__inventoryCache.find(x => x.sku === sku);
-  if (projection) {
-    Object.assign(projection, { lowStock: lowStock, type: type, colour: colour, notes: notes, photo: photo });
-    await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
-  }
-
   clearInventoryForm();
   renderInventoryTable(window.__inventoryCache);
 }
@@ -1191,8 +1185,9 @@ async function importInventoryCSV(event) {
 
     if (window.InventoryLedger) {
       const transactions = await window.InventoryLedger.ensure();
-      importedTransactions.forEach(txn => transactions.push(Object.assign({
-        id: 'import_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      const importBatchId = Date.now().toString(36);
+      importedTransactions.forEach((txn, index) => transactions.push(Object.assign({
+        id: 'import_' + importBatchId + '_' + index.toString(36) + Math.random().toString(36).slice(2, 6),
         date: new Date().toISOString()
       }, txn)));
       await window.makerAPI.writeData(window.InventoryLedger.FILE, transactions);

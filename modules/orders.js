@@ -471,8 +471,9 @@
     if (deductedCount > 0) {
       if (window.InventoryLedger) {
         const transactions = await window.InventoryLedger.ensure();
-        consumptionTransactions.forEach(txn => transactions.push(Object.assign({
-          id: 'consume_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        const consumptionBatchId = Date.now().toString(36);
+        consumptionTransactions.forEach((txn, index) => transactions.push(Object.assign({
+          id: 'consume_' + consumptionBatchId + '_' + index.toString(36) + Math.random().toString(36).slice(2, 6),
           date: new Date().toISOString(), metricCapacity: 1
         }, txn)));
         await window.makerAPI.writeData(window.InventoryLedger.FILE, transactions);
