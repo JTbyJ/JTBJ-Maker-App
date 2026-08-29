@@ -6,6 +6,10 @@
  * - Fixed undefined field fallback bug for truncated Google Sheets rows
  * - Added JSON fallback when Google Sheets is unreachable
  * - Improved HTTP error handling and response validation
+ * 
+ * PATCH v1.1 (2026-08-29):
+ * - Fixed context binding issue in fetchFromDatabase
+ * - Ensured scriptUrl is always accessible across modules
  */
 
 /**
@@ -203,7 +207,9 @@ window.MAKER_CONFIG = {
    * Save a single row of data to a specific tab in your Google Sheet (with automatic debounced parallel batching)
    */
   async saveToDatabase(sheetName, rowArray) {
-    if (!this.scriptUrl) {
+    // Use window.MAKER_CONFIG.scriptUrl explicitly (PATCH v1.1 FIX)
+    const url = window.MAKER_CONFIG.scriptUrl;
+    if (!url) {
       console.error('[Google Sheets] Web App URL missing');
       return;
     }
@@ -230,7 +236,7 @@ window.MAKER_CONFIG = {
       const promises = chunk.map(async (tx) => {
         try {
           const payload = JSON.stringify({ sheet: tx.sheetName, row: tx.rowArray });
-          const url = `${this.scriptUrl}?data=${encodeURIComponent(payload)}`;
+          const url = `${window.MAKER_CONFIG.scriptUrl}?data=${encodeURIComponent(payload)}`;
           await fetch(url, { method: 'GET', mode: 'no-cors' });
           console.log(`[Google Sheets] Batch-synced row to '${tx.sheetName}'!`);
         } catch (err) {
@@ -247,17 +253,20 @@ window.MAKER_CONFIG = {
   },
 
   /**
-   * Fetch data from a specific tab in your Google Sheet (PATCH v1.0 - Enhanced)
+   * Fetch data from a specific tab in your Google Sheet (PATCH v1.1 - FIXED CONTEXT)
    * Now includes HTTP validation, row sanitization, and error handling
+   * Uses window.MAKER_CONFIG.scriptUrl to avoid context binding issues
    */
   async fetchFromDatabase(sheetName) {
-    if (!this.scriptUrl) {
-      console.error('[Google Sheets] Script URL not configured');
+    // PATCH v1.1: Use window.MAKER_CONFIG.scriptUrl explicitly
+    const scriptUrl = window.MAKER_CONFIG.scriptUrl;
+    if (!scriptUrl) {
+      console.warn('[Sync Parser] Script URL not configured - using local JSON fallback');
       return null;
     }
 
     try {
-      const url = `${this.scriptUrl}?sheet=${encodeURIComponent(sheetName)}&_t=${Date.now()}`;
+      const url = `${scriptUrl}?sheet=${encodeURIComponent(sheetName)}&_t=${Date.now()}`;
       const response = await fetch(url);
       
       // Validate HTTP response status (PATCH FIX #1)
@@ -280,7 +289,7 @@ window.MAKER_CONFIG = {
         return row.map(cell => cell === undefined || cell === null ? '' : cell);
       });
       
-      console.log(`[Google Sheets] Successfully fetched ${sanitized.length} rows from '${sheetName}'`);
+      console.log(`[Google Sheets] ✓ Successfully fetched ${sanitized.length} rows from '${sheetName}'`);
       return sanitized;
     } catch (err) {
       console.error(`[Google Sheets] Fetch failed for '${sheetName}':`, err.message);
