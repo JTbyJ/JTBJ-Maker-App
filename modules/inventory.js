@@ -103,7 +103,7 @@ window.__makerInit_inventory = function () {
 
             <!-- STOCK & SUPPLIER DETAILS -->
             <div class="input-row">
-              <div class="field" style="flex:1;"><label>Qty in Stock (Packs)</label><input type="number" id="inv-form-qty" required value="1" min="0"></div>
+              <div class="field" style="flex:1;"><label>Purchase Qty (Packs)</label><input type="number" id="inv-form-qty" required value="1" min="0"></div>
               <div class="field" style="flex:1;"><label>Low Stock Alert</label><input type="number" id="inv-form-lowstock" required value="2" min="0"></div>
               <div class="field" style="flex:1;">
                 <div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">Supplier Lookup</label><button type="button" class="btn btn-ghost btn-sm" data-goto="suppliers" style="padding:2px 6px;font-size:10px;line-height:1;margin-bottom:4px;border:none;background:none;color:var(--accent);font-weight:700;cursor:pointer">+ New</button></div>
@@ -135,7 +135,7 @@ window.__makerInit_inventory = function () {
             <div style="border:1px solid var(--border); padding:16px; border-radius:10px; margin-bottom:16px; background:rgba(255,255,255,0.01);">
               <h4 style="font-size:12px; text-transform:uppercase; color:var(--accent); margin-bottom:12px; font-weight:700;">Replenishment Costing & Unit Metric</h4>
               <div class="input-row">
-                <div class="field" style="flex:1;"><label>Replenishment Cost ($)</label><input type="number" id="inv-form-cost" step="0.01" required value="0.00" oninput="calcFormMetricCost()"></div>
+                <div class="field" style="flex:1;"><label>Purchase Cost ($)</label><input type="number" id="inv-form-cost" step="0.01" required value="0.00" oninput="calcFormMetricCost()"></div>
                 <div class="field" style="flex:1;">
                   <label>Unit Metric</label>
                   <select id="inv-form-metric" required onchange="onInventoryMetricChange(); calcFormMetricCost();">
@@ -348,6 +348,17 @@ async function loadInventory(forceRefresh = false) {
     window.__skuCatalogCache = await window.makerAPI.readData('sku.json') || [];
   } catch(e) {
     window.__skuCatalogCache = [];
+  }
+
+  // Convert legacy mutable rows once, then maintain inventory.json as the ledger
+  // aggregate projection used by the existing UI.
+  if (window.InventoryLedger) {
+    try {
+      const transactions = await window.InventoryLedger.ensure();
+      await window.InventoryLedger.rebuild(transactions);
+    } catch (err) {
+      console.error('Inventory ledger initialization failed:', err);
+    }
   }
 
   // Use memory cache if available and refresh isn't forced
@@ -915,72 +926,22 @@ async function saveInventoryItemForm(e) {
 
   if (!window.__inventoryCache) window.__inventoryCache = [];
 
-  // AVCO Weighted Average Cost Recalculation
-  try {
-    let skus = [];
-    if (window.makerAPI && window.makerAPI.readData) {
-      skus = await window.makerAPI.readData('sku.json') || [];
-    }
-    const skuItem = skus.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase());
-    if (skuItem) {
-      const existingIdx = window.__inventoryCache.findIndex(x => x.id === id);
-      const oldQty = existingIdx >= 0 ? Number(window.__inventoryCache[existingIdx].qty || 0) : 0;
-      const addedQty = qty - oldQty;
-
-      if (addedQty > 0) {
-        const otherLotsQty = window.__inventoryCache.reduce((sum, item) => {
-          if (item.id !== id && item.sku && item.sku.toLowerCase() === sku.toLowerCase()) {
-            return sum + Number(item.qty || 0);
-          }
-          return sum;
-        }, 0);
-        const currentTotalQty = otherLotsQty + oldQty;
-        const currentSkuCost = Number(skuItem.cost || 0);
-
-        if (currentTotalQty > 0 && currentSkuCost > 0) {
-          const totalValue = (currentTotalQty * currentSkuCost) + (addedQty * cost);
-          const newTotalQty = currentTotalQty + addedQty;
-          skuItem.cost = Number((totalValue / newTotalQty).toFixed(2));
-        } else {
-          skuItem.cost = cost;
-        }
-
-        await window.makerAPI.writeData('sku.json', skus);
-
-        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-          await window.MAKER_CONFIG.saveToDatabase('Sku', [
-            skuItem.id, skuItem.sku, skuItem.name, skuItem.cat || '', skuItem.subcat || '',
-            skuItem.brand || '', skuItem.cost, skuItem.price || 0, skuItem.cogs || 0, skuItem.retail || 0,
-            skuItem.status || 'Active', skuItem.notes || '', skuItem.classification || 'Raw Component / Material (BOM Input)', skuItem.photo || '',
-            skuItem.supplier || '', skuItem.variation || '', skuItem.varCode || '', skuItem.typeName || '', skuItem.typeCode || ''
-          ]);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('AVCO Cost Engine Error:', err);
+  const prior = window.__inventoryCache.find(x => x.sku === sku);
+  const priorQty = prior ? Number(prior.qty || 0) : 0;
+  const quantityDelta = qty * metricCapacity - priorQty;
+  if (quantityDelta) {
+    await window.InventoryLedger.record({
+      type: quantityDelta > 0 ? 'purchase' : 'consumption',
+      sku: sku, qty: Math.abs(quantityDelta), baseQty: Math.abs(quantityDelta),
+      unitMetric: unitMetric, metricCapacity: 1,
+      unitCost: quantityDelta > 0 ? cost / metricCapacity : Number(prior && prior.averageUnitCost || 0),
+      supplier: supplier, location: location, metadata: itemObj
+    });
   }
-
-  const idx = window.__inventoryCache.findIndex(x => x.id === id);
-  if (idx >= 0) {
-    window.__inventoryCache[idx] = itemObj;
-  } else {
-    window.__inventoryCache.unshift(itemObj);
-  }
-
-  // Write local
-  if (window.makerAPI && window.makerAPI.writeData) {
+  const projection = window.__inventoryCache.find(x => x.sku === sku);
+  if (projection) {
+    Object.assign(projection, { lowStock: lowStock, type: type, colour: colour, notes: notes, photo: photo });
     await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
-  }
-
-  // Write remote Sheets tab
-  if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-    const rowArray = [
-      id, sku, name, brand, cat, subcat, type, colour, qty, lowStock,
-      diameter, weight, printTemp, bedTemp, cost, location, supplier, notes,
-      unitMetric, metricCapacity, photo
-    ];
-    await window.MAKER_CONFIG.saveToDatabase('Inventory', rowArray);
   }
 
   clearInventoryForm();
@@ -1151,6 +1112,7 @@ async function importInventoryCSV(event) {
 
     if (!window.__inventoryCache) window.__inventoryCache = [];
     let importedCount = 0;
+    const importedTransactions = [];
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -1195,6 +1157,13 @@ async function importInventoryCSV(event) {
         unitMetric: (unitMetricIdx !== -1 && cols[unitMetricIdx]) ? cols[unitMetricIdx] : 'ea',
         metricCapacity: (metricCapacityIdx !== -1 && cols[metricCapacityIdx]) ? Number(cols[metricCapacityIdx]) : 1
       };
+      const capacity = Number(itemObj.metricCapacity || 1) || 1;
+      importedTransactions.push({
+        type: 'purchase', sku: itemObj.sku, qty: itemObj.qty,
+        baseQty: itemObj.qty * capacity, unitMetric: itemObj.unitMetric,
+        metricCapacity: capacity, unitCost: Number(itemObj.cost || 0) / capacity,
+        supplier: itemObj.supplier, location: itemObj.location, metadata: itemObj
+      });
 
       if (existingIndex !== -1) {
         // Update existing item
@@ -1220,8 +1189,15 @@ async function importInventoryCSV(event) {
       importedCount++;
     }
 
-    // Save update cache locally
-    if (window.makerAPI && window.makerAPI.writeData) {
+    if (window.InventoryLedger) {
+      const transactions = await window.InventoryLedger.ensure();
+      importedTransactions.forEach(txn => transactions.push(Object.assign({
+        id: 'import_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        date: new Date().toISOString()
+      }, txn)));
+      await window.makerAPI.writeData(window.InventoryLedger.FILE, transactions);
+      await window.InventoryLedger.rebuild(transactions);
+    } else if (window.makerAPI && window.makerAPI.writeData) {
       await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
     }
 
