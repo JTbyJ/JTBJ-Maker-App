@@ -427,9 +427,9 @@ async function loadInventory(forceRefresh = false) {
         for (let i = 1; i < rawRows.length; i++) {
           const r = rawRows[i];
           if (!r || r.length === 0) continue;
-          let idVal = idIdx !== -1 ? r[idIdx] : '';
-          const skuVal = skuIdx !== -1 ? r[skuIdx] : '';
-          const nameVal = nameIdx !== -1 ? r[nameIdx] : '';
+          let idVal = window.parseRowField(r, idIdx, '');
+          const skuVal = window.parseRowField(r, skuIdx, '');
+          const nameVal = window.parseRowField(r, nameIdx, '');
           if (!idVal && !skuVal && !nameVal) continue;
 
           let newlyAssigned = false;
@@ -442,24 +442,24 @@ async function loadInventory(forceRefresh = false) {
             id: idVal,
             sku: skuVal,
             name: nameVal,
-            brand: brandIdx !== -1 ? r[brandIdx] : '',
-            cat: catIdx !== -1 ? r[catIdx] : 'FIL',
-            subcat: subcatIdx !== -1 ? r[subcatIdx] : '',
-            type: typeIdx !== -1 ? r[typeIdx] : '',
-            colour: colourIdx !== -1 ? r[colourIdx] : '',
-            qty: qtyIdx !== -1 ? (Number(r[qtyIdx]) || 0) : 0,
-            lowStock: lowStockIdx !== -1 ? (Number(r[lowStockIdx]) || 2) : 2,
-            diameter: diameterIdx !== -1 ? r[diameterIdx] : '',
-            weight: weightIdx !== -1 ? r[weightIdx] : '',
-            printTemp: printTempIdx !== -1 ? r[printTempIdx] : '',
-            bedTemp: bedTempIdx !== -1 ? r[bedTempIdx] : '',
-            cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
-            location: locationIdx !== -1 ? r[locationIdx] : '',
-            supplier: supplierIdx !== -1 ? r[supplierIdx] : '',
-            notes: notesIdx !== -1 ? r[notesIdx] : '',
-            unitMetric: unitMetricIdx !== -1 ? r[unitMetricIdx] : 'ea',
-            metricCapacity: metricCapacityIdx !== -1 ? (Number(r[metricCapacityIdx]) || 1) : 1,
-            photo: photoIdx !== -1 ? r[photoIdx] : ''
+            brand: window.parseRowField(r, brandIdx, ''),
+            cat: window.parseRowField(r, catIdx, 'FIL'),
+            subcat: window.parseRowField(r, subcatIdx, ''),
+            type: window.parseRowField(r, typeIdx, ''),
+            colour: window.parseRowField(r, colourIdx, ''),
+            qty: window.parseRowNumber(r, qtyIdx, 0),
+            lowStock: window.parseRowNumber(r, lowStockIdx, 2),
+            diameter: window.parseRowField(r, diameterIdx, ''),
+            weight: window.parseRowField(r, weightIdx, ''),
+            printTemp: window.parseRowField(r, printTempIdx, ''),
+            bedTemp: window.parseRowField(r, bedTempIdx, ''),
+            cost: window.parseRowNumber(r, costIdx, 0),
+            location: window.parseRowField(r, locationIdx, ''),
+            supplier: window.parseRowField(r, supplierIdx, ''),
+            notes: window.parseRowField(r, notesIdx, ''),
+            unitMetric: window.parseRowField(r, unitMetricIdx, 'ea'),
+            metricCapacity: window.parseRowNumber(r, metricCapacityIdx, 1),
+            photo: window.parseRowField(r, photoIdx, '')
           };
           remoteDataParsed.push(itemObj);
 
