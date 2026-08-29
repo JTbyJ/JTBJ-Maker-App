@@ -441,9 +441,9 @@
           for (let i = 1; i < remoteData.length; i++) {
             const r = remoteData[i];
             if (!r || r.length === 0) continue;
-            let idVal = (idIdx !== -1 ? r[idIdx] : '') || '';
-            const skuVal = (skuIdx !== -1 ? r[skuIdx] : '') || '';
-            const nameVal = (nameIdx !== -1 ? r[nameIdx] : '') || '';
+            let idVal = window.parseRowField(r, idIdx, '');
+            const skuVal = window.parseRowField(r, skuIdx, '');
+            const nameVal = window.parseRowField(r, nameIdx, '');
             if (!idVal && !skuVal && !nameVal) continue;
 
             let newlyAssigned = false;
@@ -456,22 +456,22 @@
               id: idVal,
               sku: skuVal,
               name: nameVal,
-              cat: (catIdx !== -1 ? r[catIdx] : '') || firstCat,
-              subcat: (subcatIdx !== -1 ? r[subcatIdx] : '') || '',
-              brand: (brandIdx !== -1 ? r[brandIdx] : '') || '',
-              supplier: (supplierIdx !== -1 ? r[supplierIdx] : '') || '',
-              variation: (varIdx !== -1 ? r[varIdx] : '') || '',
-              varCode: (varCodeIdx !== -1 ? r[varCodeIdx] : '') || '',
-              typeName: (typeNameIdx !== -1 ? r[typeNameIdx] : '') || '',
-              typeCode: (typeCodeIdx !== -1 ? r[typeCodeIdx] : '') || '',
-              cost: costIdx !== -1 ? (Number(r[costIdx]) || 0) : 0,
-              price: priceIdx !== -1 ? (Number(r[priceIdx]) || 0) : 0,
-              cogs: cogsIdx !== -1 ? (Number(r[cogsIdx]) || 0) : 0,
-              retail: retailIdx !== -1 ? (Number(r[retailIdx]) || 0) : 0,
-              status: (statusIdx !== -1 ? r[statusIdx] : '') || 'Active',
-              notes: (notesIdx !== -1 ? r[notesIdx] : '') || '',
-              classification: (classIdx !== -1 ? r[classIdx] : '') || 'Raw Component / Material (BOM Input)',
-              photo: (photoIdx !== -1 ? r[photoIdx] : '') || ''
+              cat: window.parseRowField(r, catIdx, firstCat),
+              subcat: window.parseRowField(r, subcatIdx, ''),
+              brand: window.parseRowField(r, brandIdx, ''),
+              supplier: window.parseRowField(r, supplierIdx, ''),
+              variation: window.parseRowField(r, varIdx, ''),
+              varCode: window.parseRowField(r, varCodeIdx, ''),
+              typeName: window.parseRowField(r, typeNameIdx, ''),
+              typeCode: window.parseRowField(r, typeCodeIdx, ''),
+              cost: window.parseRowNumber(r, costIdx, 0),
+              price: window.parseRowNumber(r, priceIdx, 0),
+              cogs: window.parseRowNumber(r, cogsIdx, 0),
+              retail: window.parseRowNumber(r, retailIdx, 0),
+              status: window.parseRowField(r, statusIdx, 'Active'),
+              notes: window.parseRowField(r, notesIdx, ''),
+              classification: window.parseRowField(r, classIdx, 'Raw Component / Material (BOM Input)'),
+              photo: window.parseRowField(r, photoIdx, '')
             };
             parsedSkus.push(itemObj);
 
