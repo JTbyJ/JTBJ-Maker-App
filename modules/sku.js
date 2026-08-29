@@ -209,7 +209,7 @@
 
       /* PRICING */
       '<div class="input-row">'+
-        '<div class="field"><label style="display:flex;justify-content:space-between;align-items:center"><span>Cost (CAD $)</span><span style="font-size:10px;color:var(--accent);font-weight:700" title="Auto-updated via AVCO on stock replenishment, or set manually as benchmark">🔒 AVCO / Benchmark</span></label><input id="sku-cost" type="number" step="0.01" placeholder="0.00"></div>'+
+        '<div class="field"><label style="display:flex;justify-content:space-between;align-items:center"><span>Average Unit Cost (CAD $)</span><span style="font-size:10px;color:var(--accent);font-weight:700" title="Auto-updated from inventory purchase transactions">🔒 Ledger Average</span></label><input id="sku-cost" type="number" step="0.01" placeholder="0.00"></div>'+
         '<div class="field"><label>Price (CAD $)</label><input id="sku-price" type="number" step="0.01" placeholder="0.00"></div>'+
         '<div class="field"><label>Margin %</label>'+
           '<div id="sku-margin-live" style="padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-weight:700;font-size:14px;color:var(--text-muted)">--%</div>'+

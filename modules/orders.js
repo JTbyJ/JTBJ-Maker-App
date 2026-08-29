@@ -445,6 +445,7 @@
     try { products = await window.makerAPI.readData('products.json') || []; } catch(e){}
 
     let deductedCount = 0;
+    const consumptionTransactions = [];
     for (const line of lineItems) {
       const prod = products.find(p => p.id === line.productId || p.sku === line.productId);
       if (prod && prod.bom) {
@@ -452,26 +453,34 @@
           const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
           if (invItem) {
             const qtyToSubtract = (bomItem.qty || 1) * line.qty;
-            invItem.qty = Math.max(0, invItem.qty - qtyToSubtract);
+            consumptionTransactions.push({
+              type: 'consumption',
+              sku: invItem.sku || bomItem.itemId,
+              qty: qtyToSubtract,
+              baseQty: qtyToSubtract,
+              unitMetric: bomItem.unitMetric || invItem.unitMetric || 'ea',
+              unitCost: Number(invItem.averageUnitCost || invItem.cost || 0),
+              metadata: invItem
+            });
             deductedCount++;
-
-            // Sync inventory item row to database
-            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-              await window.MAKER_CONFIG.saveToDatabase('Inventory', [
-                invItem.id, invItem.sku, invItem.name, invItem.brand, invItem.cat,
-                invItem.subcat, invItem.type, invItem.colour, invItem.qty, invItem.lowStock,
-                invItem.diameter, invItem.weight, invItem.printTemp, invItem.bedTemp,
-                invItem.cost, invItem.location, invItem.supplier, invItem.notes,
-                invItem.unitMetric || 'ea', invItem.metricCapacity || 1
-              ]);
-            }
           }
         }
       }
     }
 
     if (deductedCount > 0) {
-      await window.makerAPI.writeData('inventory.json', inventory);
+      if (window.InventoryLedger) {
+        const transactions = await window.InventoryLedger.ensure();
+        const consumptionBatchId = Date.now().toString(36);
+        consumptionTransactions.forEach((txn, index) => transactions.push(Object.assign({
+          id: 'consume_' + consumptionBatchId + '_' + index.toString(36) + Math.random().toString(36).slice(2, 6),
+          date: new Date().toISOString(), metricCapacity: 1
+        }, txn)));
+        await window.makerAPI.writeData(window.InventoryLedger.FILE, transactions);
+        await window.InventoryLedger.rebuild(transactions);
+      } else {
+        await window.makerAPI.writeData('inventory.json', inventory);
+      }
     }
   }
 

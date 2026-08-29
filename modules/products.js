@@ -646,10 +646,10 @@ window.__productsCache = null;
           const invItem = currentInventory.find(x => x.id === bomItem.itemId || x.sku === bomItem.itemId);
           let uCost = 0;
           if (invItem) {
-            uCost = Number(invItem.cost || 0) / Number(invItem.metricCapacity || 1);
+            uCost = Number(invItem.averageUnitCost || 0) || (Number(invItem.cost || 0) / Number(invItem.metricCapacity || 1));
           } else {
             const masterSku = skuCatalog.find(s => s.sku === bomItem.itemId);
-            uCost = masterSku ? Number(masterSku.cost || 0) : Number(bomItem.unitCost || 0);
+            uCost = masterSku ? (Number(masterSku.averageUnitCost || 0) || Number(masterSku.cost || 0)) : Number(bomItem.unitCost || 0);
           }
 
           const wastePct = Number(bomItem.waste || 0);

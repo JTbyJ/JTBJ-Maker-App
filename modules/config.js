@@ -108,6 +108,7 @@ window.PricingEngine = {
     bomItems.forEach(item => {
       const spec = catalog.find(s => s.sku === item.itemId || s.id === item.itemId);
       const invItem = inv.find(x => x.sku === item.itemId || x.id === item.itemId);
+      const aggregateUnitCost = spec ? Number(spec.averageUnitCost || 0) : 0;
       let packCost = spec ? Number(spec.cost || 0) : 0;
       if (!packCost && invItem) packCost = Number(invItem.cost || 0);
       if (!packCost) packCost = Number(item.unitCost || 0);
@@ -115,7 +116,7 @@ window.PricingEngine = {
       let capacity = Number(item.metricCapacity || (invItem ? invItem.metricCapacity : 1) || 1);
       if (capacity <= 0) capacity = 1;
 
-      let unitCost = packCost / capacity;
+      let unitCost = aggregateUnitCost || (packCost / capacity);
       const qtyWithWaste = (Number(item.qty) || 0) * (1 + (Number(item.waste) || 0) / 100);
       total += unitCost * qtyWithWaste;
     });
@@ -151,6 +152,129 @@ window.PricingEngine = {
       preTaxPrice: priceExcludingTax,
       finalPrice: finalPrice,
       taxAmount: taxAmount
+    };
+
+    // Inventory purchases and adjustments are immutable ledger entries.  inventory.json
+    // is retained as a backwards-compatible aggregate projection for existing screens.
+    window.InventoryLedger = {
+      FILE: 'inventory-transactions.json',
+      async ensure() {
+        let transactions = await window.makerAPI.readData(this.FILE);
+        if (Array.isArray(transactions)) return transactions;
+        const legacy = await window.makerAPI.readData('inventory.json') || [];
+        const migratedAt = new Date().toISOString();
+        transactions = legacy.filter(item => item && item.sku).map(item => {
+          const capacity = Number(item.metricCapacity || 1) || 1;
+          const quantity = Number(item.qty || 0);
+          return {
+            id: 'opening_' + (item.id || Math.random().toString(36).slice(2)),
+            type: 'opening-balance',
+            sku: item.sku,
+            date: migratedAt,
+            qty: quantity,
+            unitMetric: item.unitMetric || 'ea',
+            metricCapacity: capacity,
+            baseQty: quantity * capacity,
+            unitCost: (Number(item.cost || 0) / capacity),
+            supplier: item.supplier || '',
+            location: item.location || '',
+            metadata: item
+          };
+        });
+        await window.makerAPI.writeData(this.FILE, transactions);
+        return transactions;
+      },
+      async record(entry) {
+        const transactions = await this.ensure();
+        const qty = Number(entry.qty || 0);
+        const capacity = Number(entry.metricCapacity || 1) || 1;
+        if (!entry.sku || !qty) throw new Error('A SKU and non-zero quantity are required.');
+        transactions.push({
+          id: entry.id || 'txn_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          type: entry.type || 'purchase',
+          sku: entry.sku,
+          date: entry.date || new Date().toISOString(),
+          qty: qty,
+          unitMetric: entry.unitMetric || 'ea',
+          metricCapacity: capacity,
+          baseQty: Number(entry.baseQty || qty * capacity),
+          unitCost: Number(entry.unitCost || 0),
+          supplier: entry.supplier || '',
+          location: entry.location || '',
+          metadata: entry.metadata || {}
+        });
+        await window.makerAPI.writeData(this.FILE, transactions);
+        if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
+          const tx = transactions[transactions.length - 1];
+          try {
+            await window.MAKER_CONFIG.saveToDatabase('InventoryTransactions', [
+              tx.id, tx.type, tx.sku, tx.date, tx.qty, tx.unitMetric, tx.metricCapacity,
+              tx.baseQty, tx.unitCost, tx.supplier, tx.location, JSON.stringify(tx.metadata || {})
+            ]);
+          } catch (err) {
+            console.error('Inventory transaction sync failed:', err);
+          }
+        }
+        return this.rebuild(transactions);
+      },
+      async rebuild(transactions) {
+        transactions = transactions || await this.ensure();
+        const aggregates = new Map();
+        transactions.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(txn => {
+          const key = txn.sku;
+          const current = aggregates.get(key) || { sku: key, qty: 0, value: 0, unitMetric: txn.unitMetric || 'ea', metadata: {} };
+          const baseQty = Math.abs(Number(txn.baseQty || 0));
+          if (txn.type === 'consumption') {
+            const used = Math.min(current.qty, baseQty);
+            current.value -= used * (current.qty ? current.value / current.qty : Number(txn.unitCost || 0));
+            current.qty -= used;
+            current.metadata = Object.assign({}, current.metadata, txn.metadata || {});
+          } else {
+            current.qty += baseQty;
+            current.value += baseQty * Number(txn.unitCost || 0);
+            current.unitMetric = txn.unitMetric || current.unitMetric;
+            current.metadata = txn.metadata || current.metadata;
+            current.supplier = txn.supplier || current.supplier;
+            current.location = txn.location || current.location;
+          }
+          aggregates.set(key, current);
+        });
+        const projection = Array.from(aggregates.values()).map(a => {
+          const m = a.metadata || {};
+          const averageUnitCost = a.qty > 0 ? a.value / a.qty : 0;
+          return Object.assign({}, m, {
+            id: 'aggregate_' + a.sku,
+            sku: a.sku,
+            qty: a.qty,
+            cost: averageUnitCost,
+            averageUnitCost: averageUnitCost,
+            inventoryValue: a.value,
+            unitMetric: a.unitMetric,
+            metricCapacity: 1,
+            supplier: a.supplier || m.supplier || '',
+            location: a.location || m.location || ''
+          });
+        });
+        let skus = await window.makerAPI.readData('sku.json') || [];
+        skus = skus.map(sku => {
+          const a = aggregates.get(sku.sku);
+          if (!a) return sku;
+          const averageUnitCost = a.qty > 0 ? a.value / a.qty : 0;
+          const lastKnownUnitCost = averageUnitCost || Number(sku.averageUnitCost || sku.cost || 0);
+          return Object.assign({}, sku, {
+            onHandQty: a.qty, inventoryValue: a.value,
+            averageUnitCost: lastKnownUnitCost, cost: lastKnownUnitCost
+          });
+        });
+        window.__inventoryCache = projection;
+        window.__skuCatalogCache = skus;
+        await Promise.all([
+          window.makerAPI.writeData('inventory.json', projection),
+          window.makerAPI.writeData('sku.json', skus)
+        ]);
+        window.dispatchEvent(new CustomEvent('maker:inventory-updated'));
+        return projection;
+      }
     };
   }
 };
@@ -302,6 +426,7 @@ window.MAKER_CONFIG = {
 const tabularFiles = [
   'customers.json',
   'inventory.json',
+  'inventory-transactions.json',
   'suppliers.json',
   'products.json',
   'orders.json',
@@ -328,6 +453,7 @@ window.rebuildAndSeedGoogleSheets = async function(showNotice = true) {
     'Suppliers': ['id', 'name', 'category', 'status', 'rating', 'website', 'contact', 'email', 'phone', 'lead', 'min', 'shipping', 'notes'],
     'Customers': ['id', 'name', 'email', 'phone', 'address', 'finish_preference', 'instagram_handle', 'customer_type', 'notes', 'created_at'],
     'Inventory': ['id', 'sku', 'name', 'brand', 'cat', 'subcat', 'type', 'colour', 'qty', 'lowStock', 'diameter', 'weight', 'printTemp', 'bedTemp', 'cost', 'location', 'supplier', 'notes', 'unitMetric', 'metricCapacity', 'photo'],
+    'InventoryTransactions': ['id', 'type', 'sku', 'date', 'qty', 'unitMetric', 'metricCapacity', 'baseQty', 'unitCost', 'supplier', 'location', 'metadata'],
     'Sku': ['id', 'sku', 'name', 'cat', 'subcat', 'brand', 'cost', 'price', 'cogs', 'retail', 'status', 'notes', 'classification', 'photo', 'supplier', 'variation', 'varCode', 'typeName', 'typeCode'],
     'Products': ['id', 'name', 'category', 'sku', 'status', 'platforms', 'saleprice', 'etsyfee', 'description', 'notes', 'labourhrs', 'labourrate', 'labourcost', 'materialcost', 'cogs', 'margin', 'bom', 'photo'],
     'Orders': ['id', 'ordernumber', 'date', 'source', 'status', 'paymentstatus', 'customerid', 'customername', 'notes', 'lineitems', 'subtotal', 'shipping', 'total', 'cogs', 'profit', 'externalid'],

@@ -463,7 +463,7 @@
 
       let capacity = Number(b.metricCapacity || (invItem ? invItem.metricCapacity : 1) || 1);
       if (capacity <= 0) capacity = 1;
-      let uCost = packCost / capacity;
+      let uCost = (spec && Number(spec.averageUnitCost || 0)) || (packCost / capacity);
 
       var qtyWithWaste = b.qty * (1 + (Number(b.waste) || 0) / 100);
       var lineTotal = qtyWithWaste * uCost;
