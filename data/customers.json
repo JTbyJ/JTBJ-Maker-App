@@ -1,17 +1,5 @@
 [
   {
-    "id": "mrws6wr9dgxw",
-    "name": "Alexander Arsenault",
-    "email": "aarsenault00@gmail.com",
-    "phone": "",
-    "address": "",
-    "finishPref": "",
-    "igHandle": "",
-    "type": "Personal",
-    "notes": "",
-    "createdAt": "2026-07-23T04:00:00.000Z"
-  },
-  {
     "id": "mrws6ya5h7re",
     "name": "Lina Nikols",
     "email": "lina.nikols@gmail.com",
@@ -24,10 +12,10 @@
     "createdAt": "2026-07-23T04:00:00.000Z"
   },
   {
-    "id": "mrws6zurrzst",
-    "name": "Mike Simpson",
-    "email": "admin@thebusinessbox.ca",
-    "phone": "+1 (514) 242-5679",
+    "id": "mrws71w6j1ww",
+    "name": "Patrick Fusarini",
+    "email": "",
+    "phone": "1 (514) 240-8550",
     "address": "",
     "finishPref": "",
     "igHandle": "",
@@ -36,14 +24,14 @@
     "createdAt": "2026-07-23T04:00:00.000Z"
   },
   {
-    "id": "mrws71w6j1ww",
-    "name": "Patrick Fusarini",
-    "email": "",
-    "phone": "+1 (514) 240-8550",
+    "id": "mrws8lgsanaz",
+    "name": "Jane Webb",
+    "email": "janewebb@gmail.com",
+    "phone": "1 (514) 592-9624",
     "address": "",
     "finishPref": "",
     "igHandle": "",
-    "type": "Personal",
+    "type": "VIP",
     "notes": "",
     "createdAt": "2026-07-23T04:00:00.000Z"
   },
@@ -51,12 +39,12 @@
     "id": "mrws73pit2wk",
     "name": "Rita Medawar",
     "email": "rmedawar@hotmail.com",
-    "phone": "+1 (514) 966-6763",
+    "phone": "1 (514) 966-6763",
     "address": "",
     "finishPref": "",
     "igHandle": "",
     "type": "Personal",
-    "notes": "Lives in Laval.",
+    "notes": "",
     "createdAt": "2026-07-23T04:00:00.000Z"
   },
   {
@@ -72,14 +60,26 @@
     "createdAt": "2026-07-23T04:00:00.000Z"
   },
   {
-    "id": "mrws8lgsanaz",
-    "name": "Jane Webb",
-    "email": "janewebb@gmail.com",
-    "phone": "+1 (514) 592-9624",
+    "id": "mrws6wr9dgxw",
+    "name": "Alexander Arsenault",
+    "email": "aarsenault00@gmail.com",
+    "phone": "",
     "address": "",
     "finishPref": "",
     "igHandle": "",
-    "type": "VIP",
+    "type": "Personal",
+    "notes": "",
+    "createdAt": "2026-07-23T04:00:00.000Z"
+  },
+  {
+    "id": "mrws6zurrzst",
+    "name": "Mike Simpson",
+    "email": "admin@thebusinessbox.ca",
+    "phone": "1 (514) 242-5679",
+    "address": "",
+    "finishPref": "",
+    "igHandle": "",
+    "type": "Personal",
     "notes": "",
     "createdAt": "2026-07-23T04:00:00.000Z"
   }

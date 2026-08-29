@@ -1,0 +1,89 @@
+[
+  {
+    "id": "cat_1",
+    "code": "FIL",
+    "label": "Filament",
+    "color": "var(--accent)",
+    "subs": {
+      "PLA": "PLA",
+      "PETG": "PETG",
+      "TPU": "TPU",
+      "ABS": "ABS",
+      "SILK": "Silk",
+      "PLACF": "PLA-CF",
+      "PLAWOOD": "PLA Wood"
+    }
+  },
+  {
+    "id": "cat_2",
+    "code": "MAT",
+    "label": "Materials",
+    "color": "var(--gold)",
+    "subs": {
+      "WOODBOARD": "Wood Board",
+      "ACRYLIC": "Acrylic",
+      "MDF": "MDF",
+      "SLATE": "Slate",
+      "LEATHER": "Leather",
+      "CORK": "Cork"
+    }
+  },
+  {
+    "id": "cat_3",
+    "code": "BLK",
+    "label": "Blanks",
+    "color": "var(--teal)",
+    "subs": {
+      "MUG": "Mug",
+      "TUMBLER": "Tumbler",
+      "TSHIRT": "T-Shirt",
+      "TOTEBAG": "Tote Bag",
+      "TILE": "Tile",
+      "COASTER": "Coaster",
+      "PILLOW": "Pillow",
+      "MOUSEPAD": "Mouse Pad",
+      "PHONECASE": "Phone Case",
+      "ORNAMENT": "Ornament"
+    }
+  },
+  {
+    "id": "cat_4",
+    "code": "CONS",
+    "label": "Consumables",
+    "color": "var(--green)",
+    "subs": {
+      "INK": "Ink",
+      "PAPER": "Paper",
+      "TEFLONSHEET": "Teflon Sheet",
+      "TAPE": "Tape",
+      "GLOVES": "Gloves",
+      "SILICAGEL": "Silica Gel"
+    }
+  },
+  {
+    "id": "cat_5",
+    "code": "PKG",
+    "label": "Packaging",
+    "color": "var(--text-muted)",
+    "subs": {
+      "POLYMAILER": "Poly Mailer",
+      "BOX": "Box",
+      "TISSUEPAPER": "Tissue Paper",
+      "STICKER": "Sticker",
+      "RIBBON": "Ribbon",
+      "GIFTBAG": "Gift Bag"
+    }
+  },
+  {
+    "id": "cat_6",
+    "code": "SUB",
+    "label": "Sublimation Supplies",
+    "color": "var(--red)",
+    "subs": {
+      "SUBPAPER": "Sub Paper",
+      "SUBINK": "Sub Ink",
+      "MUGWRAP": "Mug Wrap",
+      "SHRINKWRAP": "Shrink Wrap"
+    }
+  }
+]

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "b_4",
+    "name": "Polymaker",
+    "code": "POL",
+    "website": "polymaker.com",
+    "status": "Active",
+    "notes": "PolyTerra, PolyLite PLA/PETG"
+  },
+  {
+    "id": "b_2",
+    "name": "Overture",
+    "code": "OVE",
+    "website": "overture3d.com",
+    "status": "Active",
+    "notes": "High quality PETG/PLA"
+  },
+  {
+    "id": "b_1",
+    "name": "Creality",
+    "code": "CRE",
+    "website": "creality.com",
+    "status": "Active",
+    "notes": "Major filament and printer manufacturer"
+  },
+  {
+    "id": "b_3",
+    "name": "Bambu Lab",
+    "code": "BAM",
+    "website": "bambulab.com",
+    "status": "Active",
+    "notes": "High speed printers & filaments"
+  },
+  {
+    "id": "b_8",
+    "name": "Elegoo",
+    "code": "ELE",
+    "website": "elegoo.com",
+    "status": "Active",
+    "notes": "Resin and FDM filaments"
+  },
+  {
+    "id": "b_5",
+    "name": "eSUN",
+    "code": "ESU",
+    "website": "esun3d.com",
+    "status": "Active",
+    "notes": "PLA+ and specialty materials"
+  },
+  {
+    "id": "b_7",
+    "name": "Hatchbox",
+    "code": "HAT",
+    "website": "hatchbox3d.com",
+    "status": "Active",
+    "notes": "Consistent quality PLA"
+  },
+  {
+    "id": "b_6",
+    "name": "Sunlu",
+    "code": "SUN",
+    "website": "sunlu.com",
+    "status": "Active",
+    "notes": "Budget friendly filaments"
+  },
+  {
+    "id": "b_9",
+    "name": "Anycubic",
+    "code": "ANY",
+    "website": "anycubic.com",
+    "status": "Active",
+    "notes": "Resin and FDM materials"
+  },
+  {
+    "id": "mt37l05lw6hy",
+    "name": "Circut",
+    "code": "CIR",
+    "website": "cricut.com/en-ca/",
+    "status": "Active",
+    "notes": "Circut Supplies and support etc"
+  },
+  {
+    "id": "mt7d84k0o4tt",
+    "name": "Amazon Basics",
+    "code": "AMB",
+    "website": "www.amazon.ca",
+    "status": "Active",
+    "notes": ""
+  }
+]
