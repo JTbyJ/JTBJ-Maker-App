@@ -260,7 +260,11 @@ window.PricingEngine = {
           const a = aggregates.get(sku.sku);
           if (!a) return sku;
           const averageUnitCost = a.qty > 0 ? a.value / a.qty : 0;
-          return Object.assign({}, sku, { onHandQty: a.qty, inventoryValue: a.value, averageUnitCost: averageUnitCost, cost: averageUnitCost });
+          const lastKnownUnitCost = averageUnitCost || Number(sku.averageUnitCost || sku.cost || 0);
+          return Object.assign({}, sku, {
+            onHandQty: a.qty, inventoryValue: a.value,
+            averageUnitCost: lastKnownUnitCost, cost: lastKnownUnitCost
+          });
         });
         window.__inventoryCache = projection;
         window.__skuCatalogCache = skus;

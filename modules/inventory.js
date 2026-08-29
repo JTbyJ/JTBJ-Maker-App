@@ -930,13 +930,20 @@ async function saveInventoryItemForm(e) {
   const priorQty = prior ? Number(prior.qty || 0) : 0;
   const quantityDelta = qty * metricCapacity - priorQty;
   if (quantityDelta) {
-    await window.InventoryLedger.record({
-      type: quantityDelta > 0 ? 'purchase' : 'consumption',
-      sku: sku, qty: Math.abs(quantityDelta), baseQty: Math.abs(quantityDelta),
-      unitMetric: unitMetric, metricCapacity: 1,
-      unitCost: quantityDelta > 0 ? cost / metricCapacity : Number(prior && prior.averageUnitCost || 0),
-      supplier: supplier, location: location, metadata: itemObj
-    });
+    if (window.InventoryLedger) {
+      await window.InventoryLedger.record({
+        type: quantityDelta > 0 ? 'purchase' : 'consumption',
+        sku: sku, qty: Math.abs(quantityDelta), baseQty: Math.abs(quantityDelta),
+        unitMetric: unitMetric, metricCapacity: 1,
+        unitCost: quantityDelta > 0 ? cost / metricCapacity : Number(prior && prior.averageUnitCost || 0),
+        supplier: supplier, location: location, metadata: itemObj
+      });
+    } else {
+      const idx = window.__inventoryCache.findIndex(x => x.id === id);
+      if (idx >= 0) window.__inventoryCache[idx] = itemObj;
+      else window.__inventoryCache.unshift(itemObj);
+      await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
+    }
   }
   clearInventoryForm();
   renderInventoryTable(window.__inventoryCache);
