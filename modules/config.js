@@ -196,7 +196,10 @@ window.InventoryLedger = {
     const transactions = await this.ensure();
     const qty = Number(entry.qty || 0);
     const capacity = Number(entry.metricCapacity || 1) || 1;
-    if (!entry.sku || !qty) throw new Error('A SKU and non-zero quantity are required.');
+    // 'correction' entries record a cost/metadata revaluation with no stock movement,
+    // so they are the only transaction type permitted to have a zero quantity.
+    const isCorrection = entry.type === 'correction';
+    if (!entry.sku || (!qty && !isCorrection)) throw new Error('A SKU and non-zero quantity are required.');
     transactions.push({
       id: entry.id || 'txn_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       type: entry.type || 'purchase',
@@ -207,6 +210,7 @@ window.InventoryLedger = {
       metricCapacity: capacity,
       baseQty: Number(entry.baseQty || qty * capacity),
       unitCost: Number(entry.unitCost || 0),
+      valueAdjustment: Number(entry.valueAdjustment || 0),
       supplier: entry.supplier || '',
       location: entry.location || '',
       metadata: entry.metadata || {}
@@ -240,6 +244,14 @@ window.InventoryLedger = {
         current.value -= used * (current.qty ? current.value / current.qty : Number(txn.unitCost || 0));
         current.qty -= used;
         current.metadata = Object.assign({}, current.metadata, txn.metadata || {});
+      } else if (txn.type === 'correction') {
+        // Zero-qty revaluation / metadata correction: adjusts recorded value (if any)
+        // without moving stock, preserving history without distorting on-hand quantity.
+        current.value += Number(txn.valueAdjustment || 0);
+        current.unitMetric = txn.unitMetric || current.unitMetric;
+        current.metadata = txn.metadata || current.metadata;
+        current.supplier = txn.supplier || current.supplier;
+        current.location = txn.location || current.location;
       } else {
         current.qty += baseQty;
         current.value += baseQty * Number(txn.unitCost || 0);
@@ -285,6 +297,35 @@ window.InventoryLedger = {
     ]);
     window.dispatchEvent(new CustomEvent('maker:inventory-updated'));
     return projection;
+  },
+  // Returns the chronological transaction history for a SKU, annotated with the
+  // running on-hand quantity and weighted-average unit cost after each entry.
+  async history(sku) {
+    const transactions = await this.ensure();
+    const sorted = transactions
+      .filter(txn => txn.sku === sku)
+      .slice()
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    let runningQty = 0;
+    let runningValue = 0;
+    return sorted.map(txn => {
+      const baseQty = Math.abs(Number(txn.baseQty || 0));
+      if (txn.type === 'consumption') {
+        const used = Math.min(runningQty, baseQty);
+        runningValue -= used * (runningQty ? runningValue / runningQty : Number(txn.unitCost || 0));
+        runningQty -= used;
+      } else if (txn.type === 'correction') {
+        runningValue += Number(txn.valueAdjustment || 0);
+      } else {
+        runningQty += baseQty;
+        runningValue += baseQty * Number(txn.unitCost || 0);
+      }
+      return Object.assign({}, txn, {
+        runningQty,
+        runningAverageCost: runningQty > 0 ? runningValue / runningQty : 0
+      });
+    });
   }
 };
 

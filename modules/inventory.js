@@ -928,22 +928,45 @@ async function saveInventoryItemForm(e) {
 
   const prior = window.__inventoryCache.find(x => x.sku === sku);
   const priorQty = prior ? Number(prior.qty || 0) : 0;
+  const priorUnitCost = prior ? Number(prior.averageUnitCost || prior.cost || 0) : 0;
+  const newUnitCost = metricCapacity ? cost / metricCapacity : 0;
   const quantityDelta = qty * metricCapacity - priorQty;
-  if (quantityDelta) {
-    if (window.InventoryLedger) {
+  const costChanged = !!prior && Math.abs(newUnitCost - priorUnitCost) > 0.0005;
+  const metadataChanged = !!prior && (
+    (prior.supplier || '') !== (supplier || '') ||
+    (prior.location || '') !== (location || '') ||
+    (prior.notes || '') !== (notes || '')
+  );
+
+  if (window.InventoryLedger) {
+    if (quantityDelta) {
+      // Stock level changed: record a purchase (new cost) or consumption (at the
+      // prior weighted-average cost, since we're drawing down existing stock).
       await window.InventoryLedger.record({
         type: quantityDelta > 0 ? 'purchase' : 'consumption',
         sku: sku, qty: Math.abs(quantityDelta), baseQty: Math.abs(quantityDelta),
         unitMetric: unitMetric, metricCapacity: 1,
-        unitCost: quantityDelta > 0 ? cost / metricCapacity : Number(prior && prior.averageUnitCost || 0),
+        unitCost: quantityDelta > 0 ? newUnitCost : priorUnitCost,
         supplier: supplier, location: location, metadata: itemObj
       });
-    } else {
-      const idx = window.__inventoryCache.findIndex(x => x.id === id);
-      if (idx >= 0) window.__inventoryCache[idx] = itemObj;
-      else window.__inventoryCache.unshift(itemObj);
-      await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
+    } else if (prior && (costChanged || metadataChanged)) {
+      // No stock movement, but cost/supplier/location/notes changed: record a
+      // zero-qty correction so the edit is captured and history is preserved,
+      // instead of silently discarding it.
+      await window.InventoryLedger.record({
+        type: 'correction',
+        sku: sku, qty: 0, baseQty: 0,
+        unitMetric: unitMetric, metricCapacity: 1,
+        unitCost: newUnitCost,
+        valueAdjustment: costChanged ? (newUnitCost - priorUnitCost) * priorQty : 0,
+        supplier: supplier, location: location, metadata: itemObj
+      });
     }
+  } else {
+    const idx = window.__inventoryCache.findIndex(x => x.id === id);
+    if (idx >= 0) window.__inventoryCache[idx] = itemObj;
+    else window.__inventoryCache.unshift(itemObj);
+    await window.makerAPI.writeData('inventory.json', window.__inventoryCache);
   }
   clearInventoryForm();
   renderInventoryTable(window.__inventoryCache);
@@ -1159,12 +1182,45 @@ async function importInventoryCSV(event) {
         metricCapacity: (metricCapacityIdx !== -1 && cols[metricCapacityIdx]) ? Number(cols[metricCapacityIdx]) : 1
       };
       const capacity = Number(itemObj.metricCapacity || 1) || 1;
-      importedTransactions.push({
-        type: 'purchase', sku: itemObj.sku, qty: itemObj.qty,
-        baseQty: itemObj.qty * capacity, unitMetric: itemObj.unitMetric,
-        metricCapacity: capacity, unitCost: Number(itemObj.cost || 0) / capacity,
-        supplier: itemObj.supplier, location: itemObj.location, metadata: itemObj
-      });
+      const existingItem = existingIndex !== -1 ? window.__inventoryCache[existingIndex] : null;
+      const priorBaseQty = existingItem ? Number(existingItem.qty || 0) : 0;
+      const priorUnitCost = existingItem ? Number(existingItem.averageUnitCost || existingItem.cost || 0) : 0;
+      const newUnitCost = Number(itemObj.cost || 0) / capacity;
+      const newBaseQty = itemObj.qty * capacity;
+      const baseQtyDelta = newBaseQty - priorBaseQty;
+      const costChanged = !!existingItem && Math.abs(newUnitCost - priorUnitCost) > 0.0005;
+
+      if (!existingItem) {
+        // Brand-new item: record its starting quantity as an opening purchase.
+        if (newBaseQty) {
+          importedTransactions.push({
+            type: 'purchase', sku: itemObj.sku, qty: newBaseQty,
+            baseQty: newBaseQty, unitMetric: itemObj.unitMetric,
+            metricCapacity: 1, unitCost: newUnitCost,
+            supplier: itemObj.supplier, location: itemObj.location, metadata: itemObj
+          });
+        }
+      } else if (baseQtyDelta) {
+        // Existing item re-imported with a different quantity: post only the
+        // delta (purchase if increased, consumption if decreased) so
+        // re-importing the same CSV doesn't re-add the full quantity every time.
+        importedTransactions.push({
+          type: baseQtyDelta > 0 ? 'purchase' : 'consumption',
+          sku: itemObj.sku, qty: Math.abs(baseQtyDelta), baseQty: Math.abs(baseQtyDelta),
+          unitMetric: itemObj.unitMetric, metricCapacity: 1,
+          unitCost: baseQtyDelta > 0 ? newUnitCost : priorUnitCost,
+          supplier: itemObj.supplier, location: itemObj.location, metadata: itemObj
+        });
+      } else if (costChanged) {
+        // Quantity unchanged but cost differs: record a zero-qty correction so
+        // the revaluation is captured without duplicating stock.
+        importedTransactions.push({
+          type: 'correction', sku: itemObj.sku, qty: 0, baseQty: 0,
+          unitMetric: itemObj.unitMetric, metricCapacity: 1, unitCost: newUnitCost,
+          valueAdjustment: (newUnitCost - priorUnitCost) * priorBaseQty,
+          supplier: itemObj.supplier, location: itemObj.location, metadata: itemObj
+        });
+      }
 
       if (existingIndex !== -1) {
         // Update existing item
