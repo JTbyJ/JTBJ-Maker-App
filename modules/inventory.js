@@ -721,6 +721,7 @@ async function prepareInventoryForm(id = null) {
   // Load SKUs
   let skus = [];
   try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+  window.__skuCatalogCache = skus;
 
   const skuSelect = document.getElementById('inv-form-sku');
   if (skuSelect) {
@@ -982,20 +983,26 @@ async function saveInventoryItemForm(e) {
   let photo = document.getElementById('inv-form-photo').value.trim();
 
   if (!photo && sku) {
-    try {
-      const skus = await window.makerAPI.readData('sku.json') || [];
-      const matchedSku = skus.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase());
-      if (matchedSku && matchedSku.photo) {
-        photo = matchedSku.photo;
+    const skuCatalog = Array.isArray(window.__skuCatalogCache) ? window.__skuCatalogCache : [];
+    const matchedSku = skuCatalog.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase()) || null;
+    if (matchedSku && matchedSku.photo) {
+      photo = matchedSku.photo;
+    } else {
+      try {
+        const skus = await window.makerAPI.readData('sku.json') || [];
+        const fallbackSku = skus.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase());
+        if (fallbackSku && fallbackSku.photo) {
+          photo = fallbackSku.photo;
+        }
+      } catch (err) {
+        console.warn('Unable to sync SKU photo into inventory item:', err);
       }
-    } catch (err) {
-      console.warn('Unable to sync SKU photo into inventory item:', err);
     }
   }
 
   if (!window.__inventoryCache) window.__inventoryCache = [];
 
-  const prior = window.__inventoryCache.find(x => x.sku === sku);
+  const prior = sku ? window.__inventoryCache.find(x => x.sku === sku) : null;
   const editModeId = document.getElementById('inv-form-id').value;
   const isEditMode = Boolean(editModeId);
   const rawMetricCapacity = Number(metricCapacity);
