@@ -148,7 +148,7 @@
 
               <div class="table-wrap" style="flex:1;min-height:160px;margin-bottom:14px">
                 <table>
-                  <thead><tr><th>Product Name</th><th>Qty</th><th>Price</th><th>Total</th><th style="width:40px"></th></tr></thead>
+                  <thead><tr><th>Product Name</th><th>Qty</th><th>Price</th><th>COGS/ea</th><th>Total</th><th style="width:40px"></th></tr></thead>
                   <tbody id="o-line-tbody"></tbody>
                 </table>
               </div>
@@ -310,17 +310,33 @@
       }
     });
 
-    g('o-item-add').addEventListener('click',function(){
+    g('o-item-add').addEventListener('click',async function(){
       var id=g('o-item-sel').value;
       var qty=parseInt(g('o-item-qty').value)||0;
       if(!id||qty<=0)return;
       var prod=prodList.find(function(x){return x.id===id;});
       if(prod){
+        // Lock in material+labour+fee cost as of *now* using the live ledger-averaged
+        // ingredient cost, rather than the product's possibly-stale stored cogs
+        // snapshot, so this order line's COGS reflects true cost at time of sale.
+        var lockedCogs=prod.cogs;
+        if(window.PricingEngine && prod.bom){
+          var skuCatalog=window.__skuCatalogCache;
+          var invCache=window.__inventoryCache;
+          if(!skuCatalog){try{skuCatalog=await window.makerAPI.readData('sku.json')||[];}catch(e){skuCatalog=[];}}
+          if(!invCache){try{invCache=await window.makerAPI.readData('inventory.json')||[];}catch(e){invCache=[];}}
+          var liveMatCost=window.PricingEngine.getLiveCost(prod.bom,skuCatalog,invCache);
+          lockedCogs=liveMatCost+Number(prod.labourCost||0)+Number(prod.etsyFee||0);
+        }
         var existing=lines.find(function(x){return x.productId===id;});
         if(existing){
+          // Re-lock cogs to the latest live cost so the combined line reflects
+          // the most recent known cost rather than silently keeping the stale
+          // value captured on the first add.
+          existing.cogs=lockedCogs;
           existing.qty+=qty;
         }else{
-          lines.push({productId:id,name:prod.name,qty:qty,price:prod.salePrice,cogs:prod.cogs});
+          lines.push({productId:id,name:prod.name,qty:qty,price:prod.salePrice,cogs:lockedCogs});
         }
         g('o-item-qty').value='1';
         renderLines();
@@ -729,14 +745,34 @@
     });
   }
 
+  // Computes the current live material+labour+fee cost for a product using
+  // cached SKU/inventory data (no fetch here, so this stays synchronous for
+  // rendering); returns null if the caches aren't populated yet.
+  function computeLiveCogs(prod){
+    if(!prod || !window.PricingEngine || !prod.bom) return null;
+    var skuCatalog=window.__skuCatalogCache;
+    var invCache=window.__inventoryCache;
+    if(!skuCatalog || !invCache) return null;
+    try{
+      var liveMatCost=window.PricingEngine.getLiveCost(prod.bom,skuCatalog,invCache);
+      return liveMatCost+Number(prod.labourCost||0)+Number(prod.etsyFee||0);
+    }catch(e){ return null; }
+  }
+
   function renderLines(){
     var tbody=g('o-line-tbody');if(!tbody)return;
     tbody.innerHTML='';
     lines.forEach(function(l,idx){
       var tot=l.qty*l.price;
       var tr=document.createElement('tr');
+      var prod=prodList.find(function(x){return x.id===l.productId;});
+      var liveCogs=computeLiveCogs(prod);
+      var cogsCell='$'+Number(l.cogs||0).toFixed(2);
+      if(liveCogs!=null && Math.abs(liveCogs-Number(l.cogs||0))>0.005){
+        cogsCell+='<br><span style="font-size:10px;color:var(--muted)" title="Live cost has since changed; this order line keeps the cost locked at time of sale.">live: $'+liveCogs.toFixed(2)+'</span>';
+      }
       tr.innerHTML=`
-        <td>${l.name}</td><td>${l.qty}</td><td>$${l.price.toFixed(2)}</td><td>$${tot.toFixed(2)}</td>
+        <td>${l.name}</td><td>${l.qty}</td><td>$${l.price.toFixed(2)}</td><td>${cogsCell}</td><td>$${tot.toFixed(2)}</td>
         <td><button type="button" class="btn btn-danger btn-sm liner" style="padding:2px 6px" data-idx="${idx}">×</button></td>
       `;
       tbody.appendChild(tr);
@@ -827,11 +863,14 @@ async function importEtsyCSV(event) {
     try { products = await window.makerAPI.readData('products.json') || []; } catch(e){}
     let inventory = [];
     try { inventory = await window.makerAPI.readData('inventory.json') || []; } catch(e){}
+    let skuCatalog = [];
+    try { skuCatalog = await window.makerAPI.readData('sku.json') || []; } catch(e){}
     let customers = [];
     try { customers = await window.makerAPI.readData('customers.json') || []; } catch(e){}
     let orders = [];
     try { orders = await window.makerAPI.readData('orders.json') || []; } catch(e){}
 
+    const consumptionTransactions = [];
     let orderCount = 0;
     let customerCount = 0;
     let stockDeductedCount = 0;
@@ -891,26 +930,31 @@ async function importEtsyCSV(event) {
       let calculatedCogs = 0;
       if (prod) {
         orderBom = prod.bom || [];
-        calculatedCogs = prod.cogs || 0;
+        // Snapshot the material cost at time of sale using the current weighted-average
+        // ledger cost (rather than the possibly-stale COGS stored on the product record),
+        // so this order's cost is locked to what stock actually cost at import time.
+        const lockedMaterialCost = window.PricingEngine
+          ? window.PricingEngine.getLiveCost(orderBom, skuCatalog, inventory)
+          : 0;
+        calculatedCogs = lockedMaterialCost + Number(prod.labourCost || 0) + Number(prod.etsyFee || 0);
 
-        // Subtract stock for each BOM item
+        // Queue stock deductions as ledger consumption transactions instead of
+        // mutating inventory.json directly, so Etsy-imported and manually-created
+        // orders both draw down the same averaged-cost ledger consistently.
         for (const bomItem of orderBom) {
           const invItem = inventory.find(inv => inv.id === bomItem.itemId || inv.sku === bomItem.itemId);
           if (invItem) {
             const qtyToDeduct = (bomItem.qty || 1) * itemQty;
-            invItem.qty = Math.max(0, invItem.qty - qtyToDeduct);
+            consumptionTransactions.push({
+              type: 'consumption',
+              sku: invItem.sku || bomItem.itemId,
+              qty: qtyToDeduct,
+              baseQty: qtyToDeduct,
+              unitMetric: bomItem.unitMetric || invItem.unitMetric || 'ea',
+              unitCost: Number(invItem.averageUnitCost || invItem.cost || 0),
+              metadata: invItem
+            });
             stockDeductedCount++;
-
-            // Sync updated row to Sheet
-            if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
-              await window.MAKER_CONFIG.saveToDatabase('Inventory', [
-                invItem.id, invItem.sku, invItem.name, invItem.brand, invItem.cat,
-                invItem.subcat, invItem.type, invItem.colour, invItem.qty, invItem.lowStock,
-                invItem.diameter, invItem.weight, invItem.printTemp, invItem.bedTemp,
-                invItem.cost, invItem.location, invItem.supplier, invItem.notes,
-                invItem.unitMetric || 'ea', invItem.metricCapacity || 1
-              ]);
-            }
           }
         }
       }
@@ -964,8 +1008,19 @@ async function importEtsyCSV(event) {
     if (customerCount > 0) {
       await window.makerAPI.writeData('customers.json', customers);
     }
-    if (stockDeductedCount > 0) {
-      await window.makerAPI.writeData('inventory.json', inventory);
+    if (consumptionTransactions.length > 0) {
+      if (window.InventoryLedger) {
+        const transactions = await window.InventoryLedger.ensure();
+        const consumptionBatchId = Date.now().toString(36);
+        consumptionTransactions.forEach((txn, index) => transactions.push(Object.assign({}, txn, {
+          id: 'etsy_import_' + consumptionBatchId + '_' + index.toString(36) + Math.random().toString(36).slice(2, 6),
+          date: new Date().toISOString(), metricCapacity: 1
+        })));
+        await window.makerAPI.writeData(window.InventoryLedger.FILE, transactions);
+        await window.InventoryLedger.rebuild(transactions);
+      } else {
+        await window.makerAPI.writeData('inventory.json', inventory);
+      }
     }
 
     // If active view is Order tab, reload
