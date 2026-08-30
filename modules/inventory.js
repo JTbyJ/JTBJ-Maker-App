@@ -721,6 +721,7 @@ async function prepareInventoryForm(id = null) {
   // Load SKUs
   let skus = [];
   try { skus = await window.makerAPI.readData('sku.json') || []; } catch(e){}
+  window.__skuCatalogCache = skus;
 
   const skuSelect = document.getElementById('inv-form-sku');
   if (skuSelect) {
@@ -734,7 +735,8 @@ async function prepareInventoryForm(id = null) {
       opt.dataset.cat = s.cat;
       opt.dataset.subcat = s.subcat;
       opt.dataset.cost = s.cost;
-      skuSelect.appendChild(opt);
+     opt.dataset.photo = s.photo || '';
+     skuSelect.appendChild(opt);
     });
   }
 
@@ -780,7 +782,8 @@ async function prepareInventoryForm(id = null) {
       document.getElementById('inv-form-type').value = item.type;
       document.getElementById('inv-form-colour').value = item.colour;
       document.getElementById('inv-form-location').value = item.location;
-      document.getElementById('inv-form-photo').value = item.photo || '';
+      const inventoryPhoto = item.photo || (item.sku ? skus.find(s => s.sku && s.sku.toLowerCase() === item.sku.toLowerCase())?.photo || '' : '');
+      document.getElementById('inv-form-photo').value = inventoryPhoto;
       document.getElementById('inv-form-diameter').value = item.diameter;
       document.getElementById('inv-form-weight').value = item.weight;
       document.getElementById('inv-form-printtemp').value = item.printTemp;
@@ -834,6 +837,11 @@ function onInventorySkuChange() {
     document.getElementById('inv-form-brand').value = opt.dataset.brand || '';
     document.getElementById('inv-form-cat').value = opt.dataset.cat || '';
     document.getElementById('inv-form-subcat').value = opt.dataset.subcat || '';
+
+    const photoInput = document.getElementById('inv-form-photo');
+    if (photoInput && !photoInput.value.trim() && opt.dataset.photo) {
+      photoInput.value = opt.dataset.photo;
+    }
 
     // Default replenishment cost from SKU database
     const costInput = document.getElementById('inv-form-cost');
@@ -972,27 +980,49 @@ async function saveInventoryItemForm(e) {
   const unitMetric = document.getElementById('inv-form-metric').value;
   const metricCapacity = Number(document.getElementById('inv-form-capacity').value) || 1;
   const notes = document.getElementById('inv-form-notes').value;
-  const photo = document.getElementById('inv-form-photo').value.trim();
+  let photo = document.getElementById('inv-form-photo').value.trim();
 
-  const itemObj = {
-    id,
-    sku,
-    name: sku ? '' : name,
-    brand: sku ? '' : brand,
-    cat: sku ? '' : cat,
-    subcat: sku ? '' : subcat,
-    qty, lowStock, supplier,
-    type, colour, location, diameter, weight, printTemp, bedTemp,
-    cost, unitMetric, metricCapacity, notes, photo
-  };
+  if (!photo && sku) {
+    const skuCatalog = Array.isArray(window.__skuCatalogCache) ? window.__skuCatalogCache : [];
+    const matchedSku = skuCatalog.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase()) || null;
+    if (matchedSku && matchedSku.photo) {
+      photo = matchedSku.photo;
+    } else {
+      try {
+        const skus = await window.makerAPI.readData('sku.json') || [];
+        const fallbackSku = skus.find(s => s.sku && s.sku.toLowerCase() === sku.toLowerCase());
+        if (fallbackSku && fallbackSku.photo) {
+          photo = fallbackSku.photo;
+        }
+      } catch (err) {
+        console.warn('Unable to sync SKU photo into inventory item:', err);
+      }
+    }
+  }
 
   if (!window.__inventoryCache) window.__inventoryCache = [];
 
-  const prior = window.__inventoryCache.find(x => x.sku === sku);
+  const prior = sku ? window.__inventoryCache.find(x => x.sku === sku) : null;
+  const editModeId = document.getElementById('inv-form-id').value;
+  const isEditMode = Boolean(editModeId);
+  const rawMetricCapacity = Number(metricCapacity);
+  const normalizedMetricCapacity = rawMetricCapacity > 0 ? rawMetricCapacity : 1;
+  const itemObj = {
+    id,
+    sku,
+    name: name || (!editModeId && prior && prior.name) || '',
+    brand: brand || (!editModeId && prior && prior.brand) || '',
+    cat: cat || (!editModeId && prior && prior.cat) || '',
+    subcat: subcat || (!editModeId && prior && prior.subcat) || '',
+    qty, lowStock, supplier,
+    type, colour, location, diameter, weight, printTemp, bedTemp,
+    cost, unitMetric, metricCapacity: normalizedMetricCapacity, notes, photo
+  };
+
   const priorQty = prior ? Number(prior.qty || 0) : 0;
   const priorUnitCost = prior ? Number(prior.averageUnitCost || prior.cost || 0) : 0;
-  const newUnitCost = metricCapacity ? cost / metricCapacity : 0;
-  const quantityDelta = qty * metricCapacity - priorQty;
+  const newUnitCost = normalizedMetricCapacity > 0 ? cost / normalizedMetricCapacity : 0;
+  const quantityDelta = isEditMode ? (qty * normalizedMetricCapacity) - priorQty : qty * normalizedMetricCapacity;
   const costChanged = !!prior && Math.abs(newUnitCost - priorUnitCost) > 0.0005;
   const metadataChanged = !!prior && (
     (prior.supplier || '') !== (supplier || '') ||
