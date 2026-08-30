@@ -974,26 +974,27 @@ async function saveInventoryItemForm(e) {
   const notes = document.getElementById('inv-form-notes').value;
   const photo = document.getElementById('inv-form-photo').value.trim();
 
+  if (!window.__inventoryCache) window.__inventoryCache = [];
+
+  const prior = window.__inventoryCache.find(x => x.sku === sku);
+  const editModeId = document.getElementById('inv-form-id').value;
+  const isEditMode = Boolean(editModeId && prior && prior.id === editModeId);
   const itemObj = {
     id,
     sku,
-    name: sku ? '' : name,
-    brand: sku ? '' : brand,
-    cat: sku ? '' : cat,
-    subcat: sku ? '' : subcat,
+    name: name || (prior && prior.name) || '',
+    brand: brand || (prior && prior.brand) || '',
+    cat: cat || (prior && prior.cat) || '',
+    subcat: subcat || (prior && prior.subcat) || '',
     qty, lowStock, supplier,
     type, colour, location, diameter, weight, printTemp, bedTemp,
     cost, unitMetric, metricCapacity, notes, photo
   };
 
-  if (!window.__inventoryCache) window.__inventoryCache = [];
-
-  const prior = window.__inventoryCache.find(x => x.sku === sku);
   const priorQty = prior ? Number(prior.qty || 0) : 0;
   const priorUnitCost = prior ? Number(prior.averageUnitCost || prior.cost || 0) : 0;
   const newUnitCost = metricCapacity ? cost / metricCapacity : 0;
-  const quantityDelta = qty * metricCapacity - priorQty;
-  const costChanged = !!prior && Math.abs(newUnitCost - priorUnitCost) > 0.0005;
+  const quantityDelta = isEditMode ? (qty * metricCapacity) - priorQty : qty * metricCapacity;  const costChanged = !!prior && Math.abs(newUnitCost - priorUnitCost) > 0.0005;
   const metadataChanged = !!prior && (
     (prior.supplier || '') !== (supplier || '') ||
     (prior.location || '') !== (location || '') ||
