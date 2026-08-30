@@ -35,8 +35,6 @@
             pointer-events: auto !important;
             user-select: text !important;
             -webkit-user-select: text !important;
-            position: relative !important;
-            z-index: 99999 !important;
           }
         </style>
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
@@ -323,8 +321,8 @@
         if(window.PricingEngine && prod.bom){
           var skuCatalog=window.__skuCatalogCache;
           var invCache=window.__inventoryCache;
-          if(!skuCatalog){try{skuCatalog=await window.makerAPI.readData('sku.json')||[];}catch(e){skuCatalog=[];}}
-          if(!invCache){try{invCache=await window.makerAPI.readData('inventory.json')||[];}catch(e){invCache=[];}}
+          if(!skuCatalog){try{skuCatalog=await window.makerAPI.readData('sku.json')||[];}catch(e){skuCatalog=[];}window.__skuCatalogCache=skuCatalog;}
+          if(!invCache){try{invCache=await window.makerAPI.readData('inventory.json')||[];}catch(e){invCache=[];}window.__inventoryCache=invCache;}
           var liveMatCost=window.PricingEngine.getLiveCost(prod.bom,skuCatalog,invCache);
           lockedCogs=liveMatCost+Number(prod.labourCost||0)+Number(prod.etsyFee||0);
         }
@@ -772,9 +770,10 @@
         cogsCell+='<br><span style="font-size:10px;color:var(--muted)" title="Live cost has since changed; this order line keeps the cost locked at time of sale.">live: $'+liveCogs.toFixed(2)+'</span>';
       }
       tr.innerHTML=`
-        <td>${l.name}</td><td>${l.qty}</td><td>$${l.price.toFixed(2)}</td><td>${cogsCell}</td><td>$${tot.toFixed(2)}</td>
+        <td></td><td>${l.qty}</td><td>$${l.price.toFixed(2)}</td><td>${cogsCell}</td><td>$${tot.toFixed(2)}</td>
         <td><button type="button" class="btn btn-danger btn-sm liner" style="padding:2px 6px" data-idx="${idx}">×</button></td>
       `;
+      tr.firstElementChild.textContent=l.name;
       tbody.appendChild(tr);
     });
     tbody.querySelectorAll('.liner').forEach(function(b){

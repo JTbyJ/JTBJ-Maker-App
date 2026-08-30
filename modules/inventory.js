@@ -31,8 +31,6 @@ window.__makerInit_inventory = function () {
           pointer-events: auto !important;
           user-select: text !important;
           -webkit-user-select: text !important;
-          position: relative !important;
-          z-index: 99999 !important;
         }
       </style>
       <div id="inventory-app-container">
@@ -675,8 +673,8 @@ function renderInventoryTable(items) {
         <td style="font-weight:700; color:var(--teal); font-family: monospace;">$${unitCost.toFixed(3)}/${metricLabel[item.unitMetric || 'ea']}</td>
         <td>${escapeHtml(item.location || '-')}</td>
         <td style="text-align: right;">
-          <button class="btn btn-ghost btn-sm" onclick="openInventoryHistoryModal('${escapeHtml(item.sku || '')}')" title="View Cost History">📜</button>
-          <button class="btn btn-ghost btn-sm" onclick="openStockAdjustmentModal('${escapeHtml(item.sku || '')}')" title="Adjust / Write Off Stock (expired, damaged, used up)">⚠️</button>
+          <button class="btn btn-ghost btn-sm inv-history-btn" data-sku="${escapeHtml(item.sku || '')}" title="View Cost History">📜</button>
+          <button class="btn btn-ghost btn-sm inv-adjust-btn" data-sku="${escapeHtml(item.sku || '')}" title="Adjust / Write Off Stock (expired, damaged, used up)">⚠️</button>
           <button class="btn btn-ghost btn-sm" onclick="openLabelModal('${item.id}')" title="Generate Label">🏷️</button>
           <button class="btn btn-ghost btn-sm" onclick="editInventoryItem('${item.id}')" title="Edit Item">✏️</button>
           <button class="btn btn-ghost btn-sm" onclick="deleteInventoryItem('${item.id}')" title="Delete Item">🗑️</button>
@@ -684,6 +682,13 @@ function renderInventoryTable(items) {
       </tr>
     `;
   }).join('');
+
+  tbody.querySelectorAll('.inv-history-btn').forEach(button => {
+    button.addEventListener('click', () => openInventoryHistoryModal(button.dataset.sku));
+  });
+  tbody.querySelectorAll('.inv-adjust-btn').forEach(button => {
+    button.addEventListener('click', () => openStockAdjustmentModal(button.dataset.sku));
+  });
 }
 
 /**

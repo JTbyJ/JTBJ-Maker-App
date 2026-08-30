@@ -227,8 +227,6 @@ window.__customerCache = null;
           pointer-events: auto !important;
           user-select: text !important;
           -webkit-user-select: text !important;
-          position: relative !important;
-          z-index: 99999 !important;
         }
 
         .badge-type {

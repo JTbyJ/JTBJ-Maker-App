@@ -128,8 +128,6 @@
     '    pointer-events: auto !important;' +
     '    user-select: text !important;' +
     '    -webkit-user-select: text !important;' +
-    '    position: relative !important;' +
-    '    z-index: 99999 !important;' +
     '  }' +
     '</style>' +
     '<div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">' +
