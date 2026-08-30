@@ -227,6 +227,61 @@ window.__makerInit_inventory = function () {
           </div>
         </div>
       </div>
+
+      <!-- COST HISTORY MODAL -->
+      <div id="inv-history-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
+        <div class="card" style="background:var(--surface); width:min(760px,92vw); max-height:85vh; overflow-y:auto; border-radius:12px; padding:24px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+          <h3 style="margin-bottom:4px; font-size:16px; font-weight:700;">Cost History <span id="inv-history-sku" style="font-family:monospace;color:var(--accent)"></span></h3>
+          <p style="color:var(--text-muted); font-size:12px; margin-bottom:16px;">Every purchase, consumption, and correction recorded against this item, with the running weighted-average cost after each entry.</p>
+          <div class="table-wrap"><table><thead><tr>
+            <th>Date</th><th>Type</th><th>Qty</th><th>Unit Cost</th><th>Supplier</th><th>Running Qty</th><th>Running Avg. Cost</th>
+          </tr></thead><tbody id="inv-history-tbody"></tbody></table></div>
+
+          <details style="margin-top:18px;">
+            <summary style="cursor:pointer; font-weight:600; font-size:13px; color:var(--accent);">➕ Add Historical Purchase (backdated invoice)</summary>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+              <label style="font-size:12px;">Invoice/Purchase Date<input type="date" id="inv-hist-date" style="width:100%"></label>
+              <label style="font-size:12px;">Quantity (packs)<input type="number" id="inv-hist-qty" min="0" step="any" style="width:100%"></label>
+              <label style="font-size:12px;">Unit Cost (per pack)<input type="number" id="inv-hist-cost" min="0" step="any" style="width:100%"></label>
+              <label style="font-size:12px;">Supplier<input type="text" id="inv-hist-supplier" style="width:100%"></label>
+              <label style="font-size:12px; grid-column:1 / -1;">Notes<input type="text" id="inv-hist-notes" style="width:100%" placeholder="e.g. Invoice #1234"></label>
+            </div>
+            <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="submitHistoricalPurchase()">Record Historical Purchase</button>
+          </details>
+
+          <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+            <button class="btn btn-ghost" onclick="closeInventoryHistoryModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STOCK ADJUSTMENT / WRITE-OFF MODAL -->
+      <div id="inv-adjust-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">
+        <div class="card" style="background:var(--surface); width:min(440px,92vw); border-radius:12px; padding:24px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+          <h3 style="margin-bottom:4px; font-size:16px; font-weight:700;">Adjust / Write Off Stock <span id="inv-adjust-sku" style="font-family:monospace;color:var(--accent)"></span></h3>
+          <p style="color:var(--text-muted); font-size:12px; margin-bottom:16px;">Use this to remove stock that expired, was damaged, was used outside of a normal sale, or to correct a physical stock count. This is recorded in cost history and reduces on-hand quantity.</p>
+          <label style="font-size:12px; display:block; margin-bottom:8px;">Quantity to remove (packs)
+            <input type="number" id="inv-adjust-qty" min="0" step="any" style="width:100%">
+          </label>
+          <label style="font-size:12px; display:block; margin-bottom:8px;">Reason
+            <select id="inv-adjust-reason" style="width:100%">
+              <option value="expired">Expired</option>
+              <option value="damaged">Damaged / Waste</option>
+              <option value="used-up">Used Up (not from a sale)</option>
+              <option value="lost">Lost / Stolen</option>
+              <option value="recount">Physical Recount Correction</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label style="font-size:12px; display:block; margin-bottom:8px;">Notes
+            <input type="text" id="inv-adjust-notes" style="width:100%">
+          </label>
+          <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+            <button class="btn btn-ghost" onclick="closeStockAdjustmentModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitStockAdjustment()">Record Write-off</button>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -620,6 +675,8 @@ function renderInventoryTable(items) {
         <td style="font-weight:700; color:var(--teal); font-family: monospace;">$${unitCost.toFixed(3)}/${metricLabel[item.unitMetric || 'ea']}</td>
         <td>${escapeHtml(item.location || '-')}</td>
         <td style="text-align: right;">
+          <button class="btn btn-ghost btn-sm" onclick="openInventoryHistoryModal('${escapeHtml(item.sku || '')}')" title="View Cost History">📜</button>
+          <button class="btn btn-ghost btn-sm" onclick="openStockAdjustmentModal('${escapeHtml(item.sku || '')}')" title="Adjust / Write Off Stock (expired, damaged, used up)">⚠️</button>
           <button class="btn btn-ghost btn-sm" onclick="openLabelModal('${item.id}')" title="Generate Label">🏷️</button>
           <button class="btn btn-ghost btn-sm" onclick="editInventoryItem('${item.id}')" title="Edit Item">✏️</button>
           <button class="btn btn-ghost btn-sm" onclick="deleteInventoryItem('${item.id}')" title="Delete Item">🗑️</button>
@@ -1023,6 +1080,140 @@ function openLabelModal(id) {
 
 function closeLabelModal() {
   document.getElementById('inv-label-modal').style.display = 'none';
+}
+
+/**
+ * Opens the Cost History modal for a given SKU, listing every ledger
+ * transaction (purchase/consumption/correction) with the running
+ * weighted-average cost, sourced from inventory-transactions.json.
+ */
+async function openInventoryHistoryModal(sku) {
+  document.getElementById('inv-history-sku').textContent = sku || '';
+  const tbody = document.getElementById('inv-history-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:16px;">Loading history...</td></tr>';
+  document.getElementById('inv-history-modal').style.display = 'flex';
+
+  let rows = [];
+  try {
+    if (window.InventoryLedger) {
+      rows = await window.InventoryLedger.history(sku);
+    }
+  } catch (e) {
+    rows = [];
+  }
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:16px;">No purchase, consumption, or correction transactions recorded for this item yet.</td></tr>';
+    return;
+  }
+
+  const typeLabels = { purchase: 'Purchase', consumption: 'Consumption', correction: 'Correction', 'opening-balance': 'Opening Balance' };
+  const reasonLabels = { expired: 'Expired', damaged: 'Damaged/Waste', 'used-up': 'Used Up', lost: 'Lost/Stolen', recount: 'Recount', other: 'Other' };
+  tbody.innerHTML = rows.slice().reverse().map(t => {
+    const dateStr = t.date ? new Date(t.date).toLocaleString() : '—';
+    const qtyStr = (t.type === 'consumption' ? '-' : t.type === 'correction' ? '' : '+') + Number(t.baseQty || t.qty || 0) + ' ' + (t.unitMetric || '');
+    const reason = t.metadata && t.metadata.reason ? (reasonLabels[t.metadata.reason] || t.metadata.reason) : '';
+    const typeLabel = (typeLabels[t.type] || t.type || '—') + (reason ? ' (' + reason + ')' : '');
+    return `
+      <tr>
+        <td>${escapeHtml(dateStr)}</td>
+        <td>${escapeHtml(typeLabel)}</td>
+        <td>${escapeHtml(qtyStr)}</td>
+        <td>$${Number(t.unitCost || 0).toFixed(3)}</td>
+        <td>${escapeHtml(t.supplier || '—')}</td>
+        <td>${Number(t.runningQty || 0).toFixed(2)}</td>
+        <td style="font-weight:700; color:var(--teal);">$${Number(t.runningAverageCost || 0).toFixed(3)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function closeInventoryHistoryModal() {
+  document.getElementById('inv-history-modal').style.display = 'none';
+}
+
+/**
+ * Records a backdated purchase transaction (e.g. from an old paper invoice)
+ * against the SKU currently shown in the Cost History modal, so historical
+ * cost records can be entered manually and folded into the weighted average.
+ */
+async function submitHistoricalPurchase() {
+  const sku = document.getElementById('inv-history-sku').textContent.trim();
+  if (!sku) return;
+  const dateVal = document.getElementById('inv-hist-date').value;
+  const qty = Number(document.getElementById('inv-hist-qty').value || 0);
+  const unitCost = Number(document.getElementById('inv-hist-cost').value || 0);
+  const supplier = document.getElementById('inv-hist-supplier').value.trim();
+  const notes = document.getElementById('inv-hist-notes').value.trim();
+  if (!dateVal || !(qty > 0)) {
+    alert('Please provide a date and a quantity greater than zero.');
+    return;
+  }
+  if (!window.InventoryLedger) {
+    alert('Inventory ledger is unavailable.');
+    return;
+  }
+  const prior = (window.__inventoryCache || []).find(x => x.sku === sku);
+  await window.InventoryLedger.record({
+    type: 'purchase',
+    sku: sku, qty: qty, baseQty: qty,
+    unitMetric: (prior && prior.unitMetric) || 'ea', metricCapacity: 1,
+    unitCost: unitCost,
+    date: new Date(dateVal).toISOString(),
+    supplier: supplier, location: prior ? prior.location : '',
+    metadata: { notes: notes }
+  });
+  document.getElementById('inv-hist-qty').value = '';
+  document.getElementById('inv-hist-cost').value = '';
+  document.getElementById('inv-hist-supplier').value = '';
+  document.getElementById('inv-hist-notes').value = '';
+  await loadInventory(true);
+  openInventoryHistoryModal(sku);
+}
+
+/**
+ * Opens the stock write-off/adjustment modal for a SKU, used to remove
+ * quantity outside of a normal sale (expired, damaged, lost, or a physical
+ * recount correction), recorded as a consumption transaction so it stays
+ * visible in cost history without being confused with production usage.
+ */
+function openStockAdjustmentModal(sku) {
+  document.getElementById('inv-adjust-sku').textContent = sku || '';
+  document.getElementById('inv-adjust-qty').value = '';
+  document.getElementById('inv-adjust-reason').value = 'expired';
+  document.getElementById('inv-adjust-notes').value = '';
+  document.getElementById('inv-adjust-modal').style.display = 'flex';
+}
+
+function closeStockAdjustmentModal() {
+  document.getElementById('inv-adjust-modal').style.display = 'none';
+}
+
+async function submitStockAdjustment() {
+  const sku = document.getElementById('inv-adjust-sku').textContent.trim();
+  const qty = Number(document.getElementById('inv-adjust-qty').value || 0);
+  const reason = document.getElementById('inv-adjust-reason').value;
+  const notes = document.getElementById('inv-adjust-notes').value.trim();
+  if (!sku || !(qty > 0)) {
+    alert('Please provide a quantity greater than zero.');
+    return;
+  }
+  if (!window.InventoryLedger) {
+    alert('Inventory ledger is unavailable.');
+    return;
+  }
+  const prior = (window.__inventoryCache || []).find(x => x.sku === sku);
+  const priorUnitCost = prior ? Number(prior.averageUnitCost || prior.cost || 0) : 0;
+  await window.InventoryLedger.record({
+    type: 'consumption',
+    sku: sku, qty: qty, baseQty: qty,
+    unitMetric: (prior && prior.unitMetric) || 'ea', metricCapacity: 1,
+    unitCost: priorUnitCost,
+    supplier: prior ? prior.supplier : '', location: prior ? prior.location : '',
+    metadata: { reason: reason, notes: notes }
+  });
+  closeStockAdjustmentModal();
+  await loadInventory(true);
 }
 
 function printLabelContent() {

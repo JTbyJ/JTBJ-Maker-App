@@ -209,7 +209,7 @@
 
       /* PRICING */
       '<div class="input-row">'+
-        '<div class="field"><label style="display:flex;justify-content:space-between;align-items:center"><span>Average Unit Cost (CAD $)</span><span style="font-size:10px;color:var(--accent);font-weight:700" title="Auto-updated from inventory purchase transactions">🔒 Ledger Average</span></label><input id="sku-cost" type="number" step="0.01" placeholder="0.00"></div>'+
+        '<div class="field"><label style="display:flex;justify-content:space-between;align-items:center"><span>Average Unit Cost (CAD $)</span><span style="font-size:10px;color:var(--accent);font-weight:700" title="Auto-updated from inventory purchase transactions">🔒 Ledger Average</span></label><input id="sku-cost" type="number" step="0.01" placeholder="0.00" readonly title="Computed automatically from inventory purchase history. Record a purchase, consumption, or correction in Inventory to change this."></div>'+
         '<div class="field"><label>Price (CAD $)</label><input id="sku-price" type="number" step="0.01" placeholder="0.00"></div>'+
         '<div class="field"><label>Margin %</label>'+
           '<div id="sku-margin-live" style="padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-weight:700;font-size:14px;color:var(--text-muted)">--%</div>'+
@@ -248,6 +248,55 @@
     '<div class="table-wrap"><table id="sku-table"><thead><tr>'+
       '<th data-sortable="false">Photo</th><th data-sort-key="sku">SKU</th><th data-sort-key="name">Product Name</th><th data-sort-key="classification">Classification</th><th data-sort-key="cat">CAT</th><th data-sort-key="brand">Brand</th><th data-sort-key="supplier">Supplier</th><th data-sort-key="cost">Cost</th><th data-sort-key="price">Price</th><th data-sort-key="cogs">COGS</th><th data-sort-key="retail">Retail</th><th data-sort-key="margin">Margin</th><th data-sort-key="status">Status</th><th style="width:70px">Actions</th>'+
     '</tr></thead><tbody id="sku-tbody"></tbody></table></div>' +
+
+    /* COST HISTORY MODAL */
+    '<div id="sku-history-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">'+
+      '<div class="card" style="background:var(--surface); width:min(760px,92vw); max-height:85vh; overflow-y:auto; border-radius:12px; padding:24px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.5);">'+
+        '<h3 style="margin-bottom:4px; font-size:16px; font-weight:700;">Cost History <span id="sku-history-sku" style="font-family:monospace;color:var(--accent)"></span></h3>'+
+        '<p style="color:var(--text-muted); font-size:12px; margin-bottom:16px;">Every purchase, consumption, and correction recorded against this SKU, with the running weighted-average cost after each entry.</p>'+
+        '<div class="table-wrap"><table><thead><tr>'+
+          '<th>Date</th><th>Type</th><th>Qty</th><th>Unit Cost</th><th>Supplier</th><th>Running Qty</th><th>Running Avg. Cost</th>'+
+        '</tr></thead><tbody id="sku-history-tbody"></tbody></table></div>'+
+        '<details style="margin-top:18px;">'+
+          '<summary style="cursor:pointer; font-weight:600; font-size:13px; color:var(--accent);">➕ Add Historical Purchase (backdated invoice)</summary>'+
+          '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">'+
+            '<label style="font-size:12px;">Invoice/Purchase Date<input type="date" id="sku-hist-date" style="width:100%"></label>'+
+            '<label style="font-size:12px;">Quantity (packs)<input type="number" id="sku-hist-qty" min="0" step="any" style="width:100%"></label>'+
+            '<label style="font-size:12px;">Unit Cost (per pack)<input type="number" id="sku-hist-cost" min="0" step="any" style="width:100%"></label>'+
+            '<label style="font-size:12px;">Supplier<input type="text" id="sku-hist-supplier" style="width:100%"></label>'+
+            '<label style="font-size:12px; grid-column:1 / -1;">Notes<input type="text" id="sku-hist-notes" style="width:100%" placeholder="e.g. Invoice #1234"></label>'+
+          '</div>'+
+          '<button type="button" class="btn btn-primary btn-sm" id="sku-hist-submit" style="margin-top:10px;">Record Historical Purchase</button>'+
+        '</details>'+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'+
+          '<button class="btn btn-ghost" id="sku-history-close">Close</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>' +
+
+    /* STOCK ADJUSTMENT / WRITE-OFF MODAL */
+    '<div id="sku-adjust-modal" style="display:none; position:fixed; z-index:11000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.8); align-items:center; justify-content:center;">'+
+      '<div class="card" style="background:var(--surface); width:min(440px,92vw); border-radius:12px; padding:24px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.5);">'+
+        '<h3 style="margin-bottom:4px; font-size:16px; font-weight:700;">Adjust / Write Off Stock <span id="sku-adjust-sku" style="font-family:monospace;color:var(--accent)"></span></h3>'+
+        '<p style="color:var(--text-muted); font-size:12px; margin-bottom:16px;">Use this to remove stock that expired, was damaged, was used outside of a normal sale, or to correct a physical stock count.</p>'+
+        '<label style="font-size:12px; display:block; margin-bottom:8px;">Quantity to remove (packs)<input type="number" id="sku-adjust-qty" min="0" step="any" style="width:100%"></label>'+
+        '<label style="font-size:12px; display:block; margin-bottom:8px;">Reason'+
+          '<select id="sku-adjust-reason" style="width:100%">'+
+            '<option value="expired">Expired</option>'+
+            '<option value="damaged">Damaged / Waste</option>'+
+            '<option value="used-up">Used Up (not from a sale)</option>'+
+            '<option value="lost">Lost / Stolen</option>'+
+            '<option value="recount">Physical Recount Correction</option>'+
+            '<option value="other">Other</option>'+
+          '</select>'+
+        '</label>'+
+        '<label style="font-size:12px; display:block; margin-bottom:8px;">Notes<input type="text" id="sku-adjust-notes" style="width:100%"></label>'+
+        '<div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">'+
+          '<button class="btn btn-ghost" id="sku-adjust-cancel">Cancel</button>'+
+          '<button class="btn btn-primary" id="sku-adjust-submit">Record Write-off</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>' +
     '';
 
   frame.appendChild(panel);
@@ -320,6 +369,123 @@
     $('sku-var-name').addEventListener('input', onVarNameInput);
   }
   ['sku-cost','sku-price'].forEach(function(id){$(id).addEventListener('input',calcMargin);});
+
+  /* ── COST HISTORY MODAL ── */
+  async function openCostHistoryModal(sku){
+    $('sku-history-sku').textContent=sku||'';
+    var tbody=$('sku-history-tbody');
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Loading history...</td></tr>';
+    $('sku-history-modal').style.display='flex';
+
+    var rows=[];
+    try {
+      if (window.InventoryLedger) {
+        rows = await window.InventoryLedger.history(sku);
+      }
+    } catch(e) { rows = []; }
+
+    if (!rows.length) {
+      tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">No purchase, consumption, or correction transactions recorded for this SKU yet.</td></tr>';
+      return;
+    }
+
+    var typeLabels={purchase:'Purchase',consumption:'Consumption',correction:'Correction','opening-balance':'Opening Balance'};
+    var reasonLabels={expired:'Expired',damaged:'Damaged/Waste','used-up':'Used Up',lost:'Lost/Stolen',recount:'Recount',other:'Other'};
+    tbody.innerHTML=rows.slice().reverse().map(function(t){
+      var dateStr=t.date?new Date(t.date).toLocaleString():'—';
+      var qtyStr=(t.type==='consumption'?'-':t.type==='correction'?'':'+')+Number(t.baseQty||t.qty||0)+' '+(t.unitMetric||'');
+      var reason=(t.metadata&&t.metadata.reason)?(reasonLabels[t.metadata.reason]||t.metadata.reason):'';
+      var typeLabel=(typeLabels[t.type]||t.type||'—')+(reason?' ('+reason+')':'');
+      return '<tr>'+
+        '<td>'+escapeHtml(dateStr)+'</td>'+
+        '<td>'+escapeHtml(typeLabel)+'</td>'+
+        '<td>'+escapeHtml(qtyStr)+'</td>'+
+        '<td>$'+Number(t.unitCost||0).toFixed(3)+'</td>'+
+        '<td>'+escapeHtml(t.supplier||'—')+'</td>'+
+        '<td>'+Number(t.runningQty||0).toFixed(2)+'</td>'+
+        '<td style="font-weight:700;color:var(--teal)">$'+Number(t.runningAverageCost||0).toFixed(3)+'</td>'+
+      '</tr>';
+    }).join('');
+  }
+  if ($('sku-history-close')) {
+    $('sku-history-close').addEventListener('click',function(){
+      $('sku-history-modal').style.display='none';
+    });
+  }
+
+  /* ── ADD HISTORICAL PURCHASE (backdated invoice) ── */
+  if ($('sku-hist-submit')) {
+    $('sku-hist-submit').addEventListener('click', async function(){
+      var sku=$('sku-history-sku').textContent.trim();
+      if(!sku) return;
+      var dateVal=$('sku-hist-date').value;
+      var qty=Number($('sku-hist-qty').value||0);
+      var unitCost=Number($('sku-hist-cost').value||0);
+      var supplier=$('sku-hist-supplier').value.trim();
+      var notes=$('sku-hist-notes').value.trim();
+      if(!dateVal || !(qty>0)){
+        alert('Please provide a date and a quantity greater than zero.');
+        return;
+      }
+      if(!window.InventoryLedger){
+        alert('Inventory ledger is unavailable.');
+        return;
+      }
+      var prior=items.find(function(x){return x.sku===sku;});
+      await window.InventoryLedger.record({
+        type:'purchase', sku:sku, qty:qty, baseQty:qty,
+        unitMetric:(prior&&prior.unitMetric)||'ea', metricCapacity:1,
+        unitCost:unitCost, date:new Date(dateVal).toISOString(),
+        supplier:supplier, location:prior?prior.location:'',
+        metadata:{notes:notes}
+      });
+      $('sku-hist-qty').value='';$('sku-hist-cost').value='';
+      $('sku-hist-supplier').value='';$('sku-hist-notes').value='';
+      await load();
+      openCostHistoryModal(sku);
+    });
+  }
+
+  /* ── STOCK ADJUSTMENT / WRITE-OFF MODAL ── */
+  function openStockAdjustModal(sku){
+    $('sku-adjust-sku').textContent=sku||'';
+    $('sku-adjust-qty').value='';
+    $('sku-adjust-reason').value='expired';
+    $('sku-adjust-notes').value='';
+    $('sku-adjust-modal').style.display='flex';
+  }
+  if ($('sku-adjust-cancel')) {
+    $('sku-adjust-cancel').addEventListener('click',function(){
+      $('sku-adjust-modal').style.display='none';
+    });
+  }
+  if ($('sku-adjust-submit')) {
+    $('sku-adjust-submit').addEventListener('click', async function(){
+      var sku=$('sku-adjust-sku').textContent.trim();
+      var qty=Number($('sku-adjust-qty').value||0);
+      var reason=$('sku-adjust-reason').value;
+      var notes=$('sku-adjust-notes').value.trim();
+      if(!sku || !(qty>0)){
+        alert('Please provide a quantity greater than zero.');
+        return;
+      }
+      if(!window.InventoryLedger){
+        alert('Inventory ledger is unavailable.');
+        return;
+      }
+      var prior=items.find(function(x){return x.sku===sku;});
+      var priorUnitCost=prior?Number(prior.averageUnitCost||prior.cost||0):0;
+      await window.InventoryLedger.record({
+        type:'consumption', sku:sku, qty:qty, baseQty:qty,
+        unitMetric:(prior&&prior.unitMetric)||'ea', metricCapacity:1,
+        unitCost:priorUnitCost,
+        supplier:prior?prior.supplier:'', location:prior?prior.location:'',
+        metadata:{reason:reason, notes:notes}
+      });
+      $('sku-adjust-modal').style.display='none';
+      await load();
+    });
+  }
 
 
   /* ── LOAD SUPPLIERS ── */
@@ -623,11 +789,27 @@
         '<td style="font-weight:700;color:'+(parseFloat(margin)>=40?'var(--green)':parseFloat(margin)>=20?'var(--gold)':'var(--red)')+'">'+margin+'</td>'+
         '<td><span class="badge '+(sc[i.status]||'')+'">'+i.status+'</span></td>'+
         '<td>'+
+          '<button class="btn btn-ghost btn-sm skuh" data-sku="'+escapeHtml(i.sku)+'" title="View Cost History">📜</button> '+
+          '<button class="btn btn-ghost btn-sm skuw" data-sku="'+escapeHtml(i.sku)+'" title="Adjust / Write Off Stock (expired, damaged, used up)">⚠️</button> '+
           '<button class="btn btn-ghost btn-sm skue" data-id="'+i.id+'">Edit</button> '+
           '<button class="btn btn-danger btn-sm skud" data-id="'+i.id+'">Del</button>'+
         '</td>'+
       '</tr>';
     }).join(''):'<tr><td colspan="14" class="empty-state"><p>No SKUs yet. Build your first one above!</p></td></tr>';
+
+    /* Cost History buttons */
+    panel.querySelectorAll('.skuh').forEach(function(b){
+      b.addEventListener('click',function(){
+        openCostHistoryModal(b.dataset.sku);
+      });
+    });
+
+    /* Stock adjustment / write-off buttons */
+    panel.querySelectorAll('.skuw').forEach(function(b){
+      b.addEventListener('click',function(){
+        openStockAdjustModal(b.dataset.sku);
+      });
+    });
 
     /* Edit buttons */
     panel.querySelectorAll('.skue').forEach(function(b){
@@ -694,7 +876,11 @@
       variation:$('sku-var-name').value.trim(),
       varCode:$('sku-var-code').value.trim().toUpperCase(),
       classification:$('sku-classification').value,
-      cost:Number($('sku-cost').value)||0,
+      // Average Unit Cost is a read-only projection of the inventory ledger's
+      // weighted average; never let a manual SKU save overwrite it. Preserve
+      // whatever the ledger last computed (or 0 for a brand-new SKU with no
+      // purchase history yet).
+      cost:(function(){var existing=editId?items.find(function(x){return x.id===editId;}):null;return existing?Number(existing.averageUnitCost||existing.cost||0):0;})(),
       price:Number($('sku-price').value)||0,
       cogs:Number($('sku-cogs').value)||0,
       retail:Number($('sku-retail').value)||0,

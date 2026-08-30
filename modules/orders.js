@@ -148,7 +148,7 @@
 
               <div class="table-wrap" style="flex:1;min-height:160px;margin-bottom:14px">
                 <table>
-                  <thead><tr><th>Product Name</th><th>Qty</th><th>Price</th><th>Total</th><th style="width:40px"></th></tr></thead>
+                  <thead><tr><th>Product Name</th><th>Qty</th><th>Price</th><th>COGS/ea</th><th>Total</th><th style="width:40px"></th></tr></thead>
                   <tbody id="o-line-tbody"></tbody>
                 </table>
               </div>
@@ -330,6 +330,10 @@
         }
         var existing=lines.find(function(x){return x.productId===id;});
         if(existing){
+          // Re-lock cogs to the latest live cost so the combined line reflects
+          // the most recent known cost rather than silently keeping the stale
+          // value captured on the first add.
+          existing.cogs=lockedCogs;
           existing.qty+=qty;
         }else{
           lines.push({productId:id,name:prod.name,qty:qty,price:prod.salePrice,cogs:lockedCogs});
@@ -741,14 +745,34 @@
     });
   }
 
+  // Computes the current live material+labour+fee cost for a product using
+  // cached SKU/inventory data (no fetch here, so this stays synchronous for
+  // rendering); returns null if the caches aren't populated yet.
+  function computeLiveCogs(prod){
+    if(!prod || !window.PricingEngine || !prod.bom) return null;
+    var skuCatalog=window.__skuCatalogCache;
+    var invCache=window.__inventoryCache;
+    if(!skuCatalog || !invCache) return null;
+    try{
+      var liveMatCost=window.PricingEngine.getLiveCost(prod.bom,skuCatalog,invCache);
+      return liveMatCost+Number(prod.labourCost||0)+Number(prod.etsyFee||0);
+    }catch(e){ return null; }
+  }
+
   function renderLines(){
     var tbody=g('o-line-tbody');if(!tbody)return;
     tbody.innerHTML='';
     lines.forEach(function(l,idx){
       var tot=l.qty*l.price;
       var tr=document.createElement('tr');
+      var prod=prodList.find(function(x){return x.id===l.productId;});
+      var liveCogs=computeLiveCogs(prod);
+      var cogsCell='$'+Number(l.cogs||0).toFixed(2);
+      if(liveCogs!=null && Math.abs(liveCogs-Number(l.cogs||0))>0.005){
+        cogsCell+='<br><span style="font-size:10px;color:var(--muted)" title="Live cost has since changed; this order line keeps the cost locked at time of sale.">live: $'+liveCogs.toFixed(2)+'</span>';
+      }
       tr.innerHTML=`
-        <td>${l.name}</td><td>${l.qty}</td><td>$${l.price.toFixed(2)}</td><td>$${tot.toFixed(2)}</td>
+        <td>${l.name}</td><td>${l.qty}</td><td>$${l.price.toFixed(2)}</td><td>${cogsCell}</td><td>$${tot.toFixed(2)}</td>
         <td><button type="button" class="btn btn-danger btn-sm liner" style="padding:2px 6px" data-idx="${idx}">×</button></td>
       `;
       tbody.appendChild(tr);
@@ -988,10 +1012,10 @@ async function importEtsyCSV(event) {
       if (window.InventoryLedger) {
         const transactions = await window.InventoryLedger.ensure();
         const consumptionBatchId = Date.now().toString(36);
-        consumptionTransactions.forEach((txn, index) => transactions.push(Object.assign({
+        consumptionTransactions.forEach((txn, index) => transactions.push(Object.assign({}, txn, {
           id: 'etsy_import_' + consumptionBatchId + '_' + index.toString(36) + Math.random().toString(36).slice(2, 6),
           date: new Date().toISOString(), metricCapacity: 1
-        }, txn)));
+        })));
         await window.makerAPI.writeData(window.InventoryLedger.FILE, transactions);
         await window.InventoryLedger.rebuild(transactions);
       } else {

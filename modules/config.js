@@ -250,8 +250,10 @@ window.InventoryLedger = {
         current.value += Number(txn.valueAdjustment || 0);
         current.unitMetric = txn.unitMetric || current.unitMetric;
         current.metadata = txn.metadata || current.metadata;
-        current.supplier = txn.supplier || current.supplier;
-        current.location = txn.location || current.location;
+        // Corrections always carry the corrected value verbatim (including an
+        // intentionally-cleared empty string), so no `||` fallback here.
+        current.supplier = txn.supplier != null ? txn.supplier : current.supplier;
+        current.location = txn.location != null ? txn.location : current.location;
       } else {
         current.qty += baseQty;
         current.value += baseQty * Number(txn.unitCost || 0);
