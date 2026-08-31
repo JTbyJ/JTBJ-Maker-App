@@ -649,15 +649,23 @@
             }
           }
 
-          const validParsed = parsedSkus.filter(x => x.sku && x.status !== 'DELETED');
           const combinedMap = new Map();
-          for (const item of validParsed) {
-            combinedMap.set(item.id || item.sku, item);
+          const deletedIds = new Set();
+          for (const item of parsedSkus) {
+            const key = item.id || item.sku;
+            if (!key) continue;
+            if (item.status === 'DELETED') {
+              combinedMap.delete(key);
+              deletedIds.add(key);
+            } else if (item.sku) {
+              combinedMap.set(key, item);
+              deletedIds.delete(key);
+            }
           }
           if (localData && Array.isArray(localData)) {
             for (const localItem of localData) {
               const key = localItem.id || localItem.sku;
-              if (key && !combinedMap.has(key) && localItem.status !== 'DELETED') {
+              if (key && !combinedMap.has(key) && !deletedIds.has(key) && localItem.status !== 'DELETED') {
                 combinedMap.set(key, localItem);
                 if (window.MAKER_CONFIG && window.MAKER_CONFIG.saveToDatabase) {
                   window.MAKER_CONFIG.saveToDatabase('Sku', [

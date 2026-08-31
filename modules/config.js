@@ -451,7 +451,10 @@ window.MAKER_CONFIG = {
         return null;
       }
       
-      const data = await response.json();
+      const responseData = await response.json();
+      const data = Array.isArray(responseData)
+        ? responseData
+        : responseData && (responseData.data || responseData.rows || responseData.values);
       
       // Validate response structure (PATCH FIX #2)
       if (!Array.isArray(data)) {
